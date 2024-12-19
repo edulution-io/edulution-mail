@@ -1,0 +1,12 @@
+services:
+  edulution-mailcow:
+    build: ./build
+    container_name: edulution-mailcow
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PWD}:${PWD}
+    environment:
+      - MAILCOW_HOSTNAME=mail.dev.multi.schule
+      - MAILCOW_TZ=Europe/Berlin
+      - MAILCOW_BRANCH=master
+      - MAILCOW_PATH=${PWD}
