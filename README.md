@@ -36,3 +36,19 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 ||
 | MAILCOW_HOSTNAME               | Yes               |                                                    | Hostname of the mailserver (eg. mail.demo.multi.schule) |
 | MAILCOW_PATH                   | Yes               |                                                    | Mailcow path: Should always set to "${PWD}" |
+
+## Manual deployment
+
+Use **docker-compose.yml** or this docker run command:
+
+```
+docker run -d \
+  --name edulution-mail \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v ${PWD}:${PWD} \
+  -e MAILCOW_HOSTNAME=mail.dev.multi.schule \
+  -e MAILCOW_PATH=${PWD} \
+  -e KEYCLOAK_CLIENT_ID=edu-mailcow-sync \
+  -e KEYCLOAK_SECRET_KEY=UIZvGG0JVDZaUEvLElwBfuqA64gMWTIl \
+  ghcr.io/edulution-io/edulution-mail
+```
