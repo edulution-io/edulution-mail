@@ -14,13 +14,12 @@ class ConfigurationStorage:
 
         self.SYNC_INTERVAL = os.environ.get("SYNC_INTERVAL", 60)
 
-        # Required!
-        self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False)
-        self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", False)
+        self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False) # entrypoint.sh set this as environment variable
+        self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "edu-mailcow-sync")
         self.KEYCLOAK_SECRET_KEY = os.environ.get("KEYCLOAK_SECRET_KEY", False)
         self.KEYCLOAK_SERVER_URL = os.environ.get("KEYCLOAK_SERVER_URL", "https://edulution-traefik/auth/")
 
-        if not self.KEYCLOAK_CLIENT_ID and not self.KEYCLOAK_SECRET_KEY and not self.MAILCOW_API_TOKEN:
+        if not self.KEYCLOAK_SECRET_KEY:
             logging.error("!!! ERROR !!!")
             logging.error("Environment variables for mailcow or keycloak are not set! Please refere the documentation!")
             exit(1)

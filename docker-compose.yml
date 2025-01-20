@@ -8,6 +8,4 @@ services:
     environment:
       - MAILCOW_HOSTNAME=mail.dev.multi.schule
       - MAILCOW_PATH=${PWD}
-
-      - KEYCLOAK_CLIENT_ID=edu-mailcow-sync
       - KEYCLOAK_SECRET_KEY=UIZvGG0JVDZaUEvLElwBfuqA64gMWTIl
