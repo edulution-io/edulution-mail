@@ -1,12 +1,13 @@
 services:
-  edulution-mailcow:
-    build: ./build
-    container_name: edulution-mailcow
+  edulution-mail:
+    image: edulution/edulution-mail
+    container_name: edulution-mail
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${PWD}:${PWD}
     environment:
       - MAILCOW_HOSTNAME=mail.dev.multi.schule
-      - MAILCOW_TZ=Europe/Berlin
-      - MAILCOW_BRANCH=master
       - MAILCOW_PATH=${PWD}
+
+      - KEYCLOAK_CLIENT_ID=edu-mailcow-sync
+      - KEYCLOAK_SECRET_KEY=UIZvGG0JVDZaUEvLElwBfuqA64gMWTIl

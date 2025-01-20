@@ -11,13 +11,39 @@
 # trap on_stop SIGTERM
 # trap on_stop SIGINT
 
+cat <<EOF
+  _____ ____  _   _ _    _   _ _____ ___ ___  _   _       __  __    _    ___ _     
+ | ____|  _ \| | | | |  | | | |_   _|_ _/ _ \| \ | |     |  \/  |  / \  |_ _| |    
+ |  _| | | | | | | | |  | | | | | |  | | | | |  \| |_____| |\/| | / _ \  | || |    
+ | |___| |_| | |_| | |__| |_| | | |  | | |_| | |\  |_____| |  | |/ ___ \ | || |___ 
+ |_____|____/ \___/|_____\___/  |_| |___\___/|_| \_|     |_|  |_/_/   \_\___|_____|
+
+EOF
+
+echo "===== Preparing Mailcow Instance ====="
 rm -rf ${MAILCOW_PATH}/mailcow
 mkdir -p ${MAILCOW_PATH}/mailcow/data
-cp -vr /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
-cp -vr /opt/mailcow/docker-compose.yml ${MAILCOW_PATH}/mailcow/
-cp -vr /opt/mailcow/generate_config.sh ${MAILCOW_PATH}/mailcow/
+cp -r /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
+cp -r /opt/mailcow/docker-compose.yml ${MAILCOW_PATH}/mailcow/
+cp -r /opt/mailcow/generate_config.sh ${MAILCOW_PATH}/mailcow/
+
+echo "==== Applying template files for the authentification... ===="
+
+mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/
+cp /templates/dovecot/edulution-sso.lua ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/edulution-sso.lua
+cp /templates/dovecot/extra.conf ${MAILCOW_PATH}/mailcow/data/conf/dovecot/extra.conf
+chown root:401 ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/edulution-sso.lua
+
+mkdir -p ${MAILCOW_PATH}/mailcow/data/web/inc/
+cp /templates/web/functions.inc.php ${MAILCOW_PATH}/mailcow/data/web/inc/functions.inc.php
+cp /templates/web/sogo-auth.php ${MAILCOW_PATH}/mailcow/data/web/sogo-auth.php
 
 cd ${MAILCOW_PATH}/mailcow
+
+echo "==== Generating Mailcow config, if does not exist... ===="
+
+export MAILCOW_TZ=${MAILCOW_TZ:-Europe/Berlin}
+export MAILCOW_BRANCH=${MAILCOW_BRANCH:-master}
 
 if [ ! -f ${MAILCOW_PATH}/data/mailcow.conf ]; then
     source ./generate_config.sh
@@ -30,19 +56,33 @@ ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/.env
 
 mkdir -p ${MAILCOW_PATH}/data/mail
 
+echo "==== Add docker override for mailcow... ===="
+
 cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
+services:
+  nginx-mailcow:
+    ports: !override
+      - 8443:443
+
 volumes:
   vmail-vol-1:
     driver_opts:
       type: none
-      device: ${MAILCOW_PATH}/mailcow/data/mail
+      device: ${MAILCOW_PATH}/data/mail
       o: bind
 EOF
 
-docker compose pull
-docker compose up -d
+echo "==== Downloading and starting mailcow... ===="
+
+docker compose pull -q 2>&1 > /dev/null
+docker compose up -d --quiet-pull 2>&1 > /dev/null
 
 docker network connect --alias edulution mailcowdockerized_mailcow-network ${HOSTNAME}
+docker network connect --alias edulution edulution-ui_default ${HOSTNAME}
+
+docker network connect --alias edulution-traefik mailcowdockerized_mailcow-network edulution-traefik
+
+echo "==== Generating API user for mailcow... ===="
 
 # Create API User for Mailcow
 if [ ! -f ${MAILCOW_PATH}/data/mailcow-token.conf ]; then
@@ -54,9 +94,16 @@ else
     source ${MAILCOW_PATH}/data/mailcow-token.conf
 fi
 
-# TEST API
-# curl -4 -k -X 'GET'   'https://nginx/api/v1/get/status/version'   -H 'accept: application/json'   -H 'X-API-Key: c6baf8-ba41dd-a814af-d8ba9b-0b3c76'
+export MAILCOW_API_TOKEN
 
+echo "==== Waiting for mailcow to come up... ===="
 
+while ! curl -s -k --head --request GET --max-time 2 "https://nginx/api/v1/get" | grep -q "HTTP/"; do
+  echo "[...]"
+  sleep 1
+done
 
-tail -f
+# Starting auth api
+source /app/venv/bin/activate
+python /app/api.py 2>&1 >> /app/log.log &
+python /app/sync.py

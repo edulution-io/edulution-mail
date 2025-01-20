@@ -1,2 +1,4 @@
 /mailcow/
 /data/
+stop_and_delete.sh
+build.sh

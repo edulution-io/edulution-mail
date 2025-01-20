@@ -4,9 +4,8 @@ import random
 import string
 import time
 import logging
-import os
 
-from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage
+from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage
 
 logging.basicConfig(format='%(levelname)s: %(asctime)s %(message)s', level=logging.INFO)
 
@@ -15,8 +14,10 @@ class EdulutionMailcowSync:
     def __init__(self):
         self._config = self._readConfig()
 
-        self.keycloak = Keycloak()
-        self.mailcow = Mailcow()
+        self.keycloak = Keycloak(server_url=self._config.KEYCLOAK_SERVER_URL, client_id=self._config.KEYCLOAK_CLIENT_ID, client_secret_key=self._config.KEYCLOAK_SECRET_KEY)
+        self.mailcow = Mailcow(apiToken=self._config.MAILCOW_API_TOKEN)
+
+        self.keycloak.initKeycloakAdmin()
 
     def start(self):
         logging.info("===== Edulution-Mailcow-Sync =====")
@@ -26,19 +27,25 @@ class EdulutionMailcowSync:
                 exit(1)
             else:
                 logging.info("=== Sync finished successfully ===")
-                time.sleep(60)
+                time.sleep(self._config.SYNC_INTERVAL)
 
     def _sync(self) -> bool:
         logging.info("=== Starting Edulution-Mailcow-Sync ===")
 
         domainList = DomainListStorage()
-        mailboxList = MailboxListStorage()
+        mailboxList = MailboxListStorage(domainList)
+        aliasList = AliasListStorage(domainList)
+        filterList = FilterListStorage(domainList)
 
         logging.info("* 1. Loading data from mailcow and keycloak")
 
         domainList.loadRawData(self.mailcow.getDomains())
         mailboxList.loadRawData(self.mailcow.getMailboxes())
+        aliasList.loadRawData(self.mailcow.getAliases())
+        filterList.loadRawData(self.mailcow.getFilters())
+        
         users = self.keycloak.getUsers()
+        groups = self.keycloak.getGroups()
 
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
 
@@ -46,13 +53,82 @@ class EdulutionMailcowSync:
             mail = user["email"]
             maildomain = mail.split("@")[-1]
 
+            if self.keycloak.checkGroupMembershipForUser(user["id"], self._config.GROUPS_TO_SYNC):
+                if not self._addDomain(maildomain, domainList):
+                    continue
+                
+                self._addMailbox(user, mailboxList)
+                self._addAliasesFromProxyAddresses(user, mail, aliasList)
+        
+        for group in groups:
+            mail = group["attributes"]["mail"][0]
+            maildomain = mail.split("@")[-1]
+            
+            membermails = []
+            for member in group["members"]:
+                if self.keycloak.checkGroupMembershipForUser(member["id"], self._config.GROUPS_TO_SYNC):
+                    membermails.append(member["email"])
+
             if not self._addDomain(maildomain, domainList):
                 continue
 
-            self._addMailbox(user, mailboxList)
-        
-        logging.info("  * " + domainList.getQueueCountsString("domain(s)"))
-        logging.info("  * " + mailboxList.getQueueCountsString("mailbox(es)"))
+            self._addMailbox({
+                "email": mail,
+                "firstName": group["name"],
+                "lastName": "(list)",
+                "attributes": {
+                    "sophomorixMailQuotaCalculated": [ 1 ]
+                }
+            }, mailboxList)
+
+            self._addAliasesFromProxyAddresses(group, mail, aliasList)
+
+            self._addListFilter(mail, membermails, filterList)
+
+        if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
+            logging.info("  * Everything is up-to-date!")
+            return True
+        else:
+            logging.info("  * " + domainList.getQueueCountsString("domain(s)"))
+            logging.info("  * " + mailboxList.getQueueCountsString("mailbox(es)"))
+            logging.info("  * " + aliasList.getQueueCountsString("alias(es)"))
+            logging.info("  * " + filterList.getQueueCountsString("filter(s)"))
+
+        logging.info("* 3. Syncing deltas to mailcow")
+
+        # 1. Delete items
+
+        # 2. Domain(s) add and update
+
+        for domain in domainList.addQueue():
+            self.mailcow.addDomain(domain)
+
+        for domain in domainList.updateQueue():
+            self.mailcow.updateDomain(domain)
+
+        # 3. Mailbox(es) add and update
+
+        for mailbox in mailboxList.addQueue():
+            self.mailcow.addMailbox(mailbox)
+
+        for mailbox in mailboxList.updateQueue():
+            self.mailcow.updateMailbox(mailbox)
+
+        # 4. Alias(es) add and update
+
+        for alias in aliasList.addQueue():
+            self.mailcow.addAlias(alias)
+
+        for alias in aliasList.updateQueue():
+            self.mailcow.updateAlias(alias)
+
+        # 5. Filter(s) add and update
+
+        for filter in filterList.addQueue():
+            self.mailcow.addFilter(filter)
+
+        for filter in filterList.updateQueue():
+            self.mailcow.updateFilter(filter)
 
         return True
     
@@ -60,7 +136,6 @@ class EdulutionMailcowSync:
         config = ConfigurationStorage()
         config.importFromEnvironment()
         return config
-
 
     def _addDomain(self, domainName: str, domainList: DomainListStorage) -> bool:
         return domainList.addElement({
@@ -81,16 +156,57 @@ class EdulutionMailcowSync:
         domain = mail.split("@")[-1]
         localPart = mail.split("@")[0]
         password = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-        #active = 0 if user["sophomorixStatus"] in ["L", "D", "R", "K", "F"] else 1
+        quota = self._config.DEFAULT_USER_QUOTA
+        if "attributes" in user:
+            if "sophomorixMailQuotaCalculated" in user["attributes"]:
+                quota = user["attributes"]["sophomorixMailQuotaCalculated"][0] 
+        #active = 0 if user["attributes"]["sophomorixStatus"] in ["L", "D", "R", "K", "F"] else 1
         return mailboxList.addElement({
             "domain": domain,
             "local_part": localPart,
             "active": 1, #active,
-            "quota": 1000, #user["sophomorixMailQuotaCalculated"],
+            "quota": quota,
             "password": password,
             "password2": password,
             "name": user["firstName"] + " " + user["lastName"]
         }, mail)
+    
+    def _addAliasesFromProxyAddresses(self, user: dict, mail: str, mailcowAliases: str | list) -> bool:
+        aliases = []
+
+        if "proxyAddresses" in user["attributes"]:
+            if isinstance(user["attributes"]["proxyAddresses"], list):
+                aliases = user["attributes"]["proxyAddresses"]
+            else:
+                aliases = [user["attributes"]["proxyAddresses"]]
+
+        if len(aliases) > 0:
+            for alias in aliases:
+                self._addAlias(alias, mail, mailcowAliases)
+
+        return True
+
+    def _addAlias(self, alias: str, goto: str, aliasList: AliasListStorage) -> bool:
+        return aliasList.addElement({
+            "address": alias,
+            "goto": goto,
+            "active": 1,
+            "sogo_visible": 1
+        }, alias)
+
+    def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):
+        scriptData = "### Auto-generated mailinglist filter by linuxmuster ###\r\n\r\n"
+        scriptData += "require \"copy\";\r\n\r\n"
+        for memberAddress in memberAddresses:
+            scriptData += f"redirect :copy \"{memberAddress}\";\r\n"
+        scriptData += "\r\ndiscard;stop;"
+        return filterList.addElement({
+            'active': 1,
+            'username': listAddress,
+            'filter_type': 'prefilter',
+            'script_data': scriptData,
+            'script_desc': f"Auto-generated mailinglist filter for {listAddress}"
+        }, listAddress)
 
 if __name__ == "__main__":
     try:
