@@ -77,7 +77,8 @@ class EdulutionMailcowSync:
                 "firstName": group["name"],
                 "lastName": "(list)",
                 "attributes": {
-                    "sophomorixMailQuotaCalculated": [ 1 ]
+                    "sophomorixMailQuotaCalculated": [ 1 ],
+                    "sophomorixStatus": "G"
                 }
             }, mailboxList)
 
@@ -160,11 +161,11 @@ class EdulutionMailcowSync:
         if "attributes" in user:
             if "sophomorixMailQuotaCalculated" in user["attributes"]:
                 quota = user["attributes"]["sophomorixMailQuotaCalculated"][0] 
-        #active = 0 if user["attributes"]["sophomorixStatus"] in ["L", "D", "R", "K", "F"] else 1
+        active = 0 if user["attributes"]["sophomorixStatus"] in ["L", "D", "R", "K", "F"] else 1
         return mailboxList.addElement({
             "domain": domain,
             "local_part": localPart,
-            "active": 1, #active,
+            "active": active,
             "quota": quota,
             "password": password,
             "password2": password,
