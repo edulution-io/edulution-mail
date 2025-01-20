@@ -38,6 +38,10 @@ mkdir -p ${MAILCOW_PATH}/mailcow/data/web/inc/
 cp /templates/web/functions.inc.php ${MAILCOW_PATH}/mailcow/data/web/inc/functions.inc.php
 cp /templates/web/sogo-auth.php ${MAILCOW_PATH}/mailcow/data/web/sogo-auth.php
 
+mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
+cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+
 cd ${MAILCOW_PATH}/mailcow
 
 echo "==== Generating Mailcow config, if does not exist... ===="
@@ -63,6 +67,10 @@ services:
   nginx-mailcow:
     ports: !override
       - 8443:443
+  sogo-mailcow:
+    volumes:
+      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
+      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
 
 volumes:
   vmail-vol-1:
