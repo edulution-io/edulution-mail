@@ -20,7 +20,7 @@ cat <<EOF
 
 EOF
 
-if [ -n $(docker compose --project-directory ${MAILCOW_PATH}/mailcow/ ps | grep mailcow) ]; then
+if docker compose --project-directory "${MAILCOW_PATH}/mailcow/" ps | grep -q 'mailcow'; then
   echo "! Mailcow is already running. Only starting api and sync..."
   source /app/venv/bin/activate
   python /app/api.py 2>&1 >> /app/log.log &
