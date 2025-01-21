@@ -23,6 +23,8 @@ EOF
 if docker compose --project-directory "${MAILCOW_PATH}/mailcow/" ps | grep -q 'mailcow'; then
   echo "! Mailcow is already running. Only starting api and sync..."
   source /app/venv/bin/activate
+  source ${MAILCOW_PATH}/data/mailcow-token.conf
+  export MAILCOW_API_TOKEN
   python /app/api.py 2>&1 >> /app/log.log &
   python /app/sync.py
   exit
