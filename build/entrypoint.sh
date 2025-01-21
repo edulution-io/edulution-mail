@@ -121,5 +121,5 @@ done
 # Starting auth api
 source /app/venv/bin/activate
 python /app/api.py 2>&1 >> /app/log.log &
-sleep 
+sleep 5
 python /app/sync.py
