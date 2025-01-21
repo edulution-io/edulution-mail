@@ -45,9 +45,9 @@ Use **docker-compose.yml** or this docker run command:
 docker run -d \
   --name edulution-mail \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  -v ${PWD}:${PWD} \
+  -v /srv/docker/edulution-mail:/srv/docker/edulution-mail \
   -e MAILCOW_HOSTNAME=mail.dev.multi.schule \
-  -e MAILCOW_PATH=${PWD} \
+  -e MAILCOW_PATH=/srv/docker/edulution-mail \
   -e KEYCLOAK_SECRET_KEY=UIZvGG0JVDZaUEvLElwBfuqA64gMWTIl \
   ghcr.io/edulution-io/edulution-mail
 ```

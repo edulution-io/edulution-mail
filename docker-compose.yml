@@ -4,8 +4,8 @@ services:
     container_name: edulution-mail
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${PWD}:${PWD}
+      - /srv/docker/edulution-mail:/srv/docker/edulution-mail
     environment:
       - MAILCOW_HOSTNAME=mail.dev.multi.schule
-      - MAILCOW_PATH=${PWD}
+      - MAILCOW_PATH=/srv/docker/edulution-mail
       - KEYCLOAK_SECRET_KEY=UIZvGG0JVDZaUEvLElwBfuqA64gMWTIl
