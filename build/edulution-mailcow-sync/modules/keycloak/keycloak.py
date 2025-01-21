@@ -72,8 +72,11 @@ class Keycloak:
         return self.keycloak_admin.get_group_members(group['id'])
     
     def checkGroupMembershipForUser(self, userid: str, validGroups: list) -> bool:
-        groups = self.keycloak_admin.get_user_groups(userid)
-        for group in groups:
-            if group["name"] in validGroups:
-                return True
-        return False
+        try:
+            groups = self.keycloak_admin.get_user_groups(userid)
+            for group in groups:
+                if group["name"] in validGroups:
+                    return True
+            return False
+        except:
+            return False

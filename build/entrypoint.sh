@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# function on_stop() {
-#     echo "Container has been stopped! Stopping mailcow an cleanup system..."
-#     docker compose --project-directory ${MAILCOW_PATH}/mailcow/ down
-#     rm -rf ${MAILCOW_PATH}/mailcow
-#     echo "Finished!"
-#     exit 0
-# }
+function on_stop() {
+    echo "Container has been stopped! Stopping mailcow an cleanup system..."
+    docker compose --project-directory ${MAILCOW_PATH}/mailcow/ down
+    rm -rf ${MAILCOW_PATH}/mailcow
+    echo "Finished!"
+    exit 0
+}
 
-# trap on_stop SIGTERM
-# trap on_stop SIGINT
+trap on_stop SIGTERM
+trap on_stop SIGINT
 
 cat <<EOF
   _____ ____  _   _ _    _   _ _____ ___ ___  _   _       __  __    _    ___ _     
@@ -19,6 +19,14 @@ cat <<EOF
  |_____|____/ \___/|_____\___/  |_| |___\___/|_| \_|     |_|  |_/_/   \_\___|_____|
 
 EOF
+
+if [ -n $(docker compose --project-directory ${MAILCOW_PATH}/mailcow/ ps | grep mailcow) ]; then
+  echo "! Mailcow is already running. Only starting api and sync..."
+  source /app/venv/bin/activate
+  python /app/api.py 2>&1 >> /app/log.log &
+  python /app/sync.py
+  exit
+fi
 
 echo "===== Preparing Mailcow Instance ====="
 rm -rf ${MAILCOW_PATH}/mailcow
@@ -90,16 +98,15 @@ docker network connect --alias edulution edulution-ui_default ${HOSTNAME}
 
 docker network connect --alias edulution-traefik mailcowdockerized_mailcow-network edulution-traefik
 
-echo "==== Generating API user for mailcow... ===="
-
 # Create API User for Mailcow
 if [ ! -f ${MAILCOW_PATH}/data/mailcow-token.conf ]; then
-    MAILCOW_API_TOKEN=$(openssl rand -hex 15 | awk '{printf "%s-%s-%s-%s-%s\n", substr($0,1,6), substr($0,7,6), substr($0,13,6), substr($0,19,6), substr($0,25,6)}')
-    echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
-    source ${MAILCOW_PATH}/mailcow/.env
-    mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
+  echo "==== Generating API user for mailcow... ===="
+  MAILCOW_API_TOKEN=$(openssl rand -hex 15 | awk '{printf "%s-%s-%s-%s-%s\n", substr($0,1,6), substr($0,7,6), substr($0,13,6), substr($0,19,6), substr($0,25,6)}')
+  echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
+  source ${MAILCOW_PATH}/mailcow/.env
+  mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
 else
-    source ${MAILCOW_PATH}/data/mailcow-token.conf
+  source ${MAILCOW_PATH}/data/mailcow-token.conf
 fi
 
 export MAILCOW_API_TOKEN
@@ -114,4 +121,5 @@ done
 # Starting auth api
 source /app/venv/bin/activate
 python /app/api.py 2>&1 >> /app/log.log &
+sleep 
 python /app/sync.py
