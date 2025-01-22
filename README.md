@@ -26,7 +26,7 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 | DOMAIN_QUOTA                   | No                | 10240                                              | (MB) The quota for the whole domain. The user quota is reserved. If the total user quota is larger than the domain quota, the sync will be stopped! |
 | GROUPS_TO_SYNC                 | No                | role-schooladministrator,role-teacher,role-student | A comma seperated list of groups of which the users will be synced
 | ENABLE_GAL                     | No                | 1 (YES)                                            | Enable (1) or disable (0) the GAL (Global Address List) |
-| SYNC_INTERVAL                  | No                | 60                                                 | (seconds) The sync interval for user and groups |
+| SYNC_INTERVAL                  | No                | 300                                                | (seconds) The sync interval for user and groups |
 | KEYCLOAK_SERVER_URL            | No                | https://edulution-traefik/auth/                    | The default keycloak server (edulution) |
 | MAILCOW_TZ                     | No                | Europe/Berlin                                      | Mailcow timezone |
 | MAILCOW_BRANCH                 | No                | master                                             | Mailcow branche (master / nightly) |
@@ -35,7 +35,7 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 | KEYCLOAK_SECRET_KEY            | Yes               |                                                    | Secret-Key for login in keycloak |
 ||
 | MAILCOW_HOSTNAME               | Yes               |                                                    | Hostname of the mailserver (eg. mail.demo.multi.schule) |
-| MAILCOW_PATH                   | Yes               |                                                    | Mailcow path: Should always set to "${PWD}" |
+| MAILCOW_PATH                   | Yes               | /srv/docker/edulution-mail                         | Mailcow path: Should always set to "/srv/docker/edulution-mail" |
 
 ## Manual deployment
 

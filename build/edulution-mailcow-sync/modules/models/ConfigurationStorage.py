@@ -12,7 +12,7 @@ class ConfigurationStorage:
         self.DOMAIN_QUOTA = os.environ.get("DOMAIN_QUOTA", 10 * 1024)
         self.ENABLE_GAL = os.environ.get("ENABLE_GAL", 1)
 
-        self.SYNC_INTERVAL = os.environ.get("SYNC_INTERVAL", 60)
+        self.SYNC_INTERVAL = os.environ.get("SYNC_INTERVAL", 300)
 
         self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False) # entrypoint.sh set this as environment variable
         self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "edu-mailcow-sync")
