@@ -1,13 +1,13 @@
+/* Fix input color of the new mail input */
+.ck-editor__editable,
+.cke_editable {
+    background-color: rgb(255, 255, 255);
+    color: rgb(26, 26, 28);
+}
 
 /* --------------------------------------------------- */
 /* DESTRUCTURED FIRST LINE - DEFAULT THEME WITHOUT HUE */
 /* --------------------------------------------------- */
-
-.ck-editor__editable,
-.cke_editable {
-    background-color: rgb(255, 255, 255);
-    color: rgb(26, 26, 28) !important;
-}
 
 md-autocomplete.md-default-theme input,
 md-autocomplete input{color: rgb(26, 26, 28)}
