@@ -29,13 +29,14 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 | SYNC_INTERVAL                  | No                | 300                                                | (seconds) The sync interval for user and groups |
 | KEYCLOAK_SERVER_URL            | No                | https://edulution-traefik/auth/                    | The default keycloak server (edulution) |
 | MAILCOW_TZ                     | No                | Europe/Berlin                                      | Mailcow timezone |
+| MAILCOW_API_TOKEN              | No                | <will be generated>                                | Define an api token to use. Schould be somthing like aaaaa-bbbbb-ccccc-ddddd-eeeee |
 | MAILCOW_BRANCH                 | No                | master                                             | Mailcow branche (master / nightly) |
 | KEYCLOAK_CLIENT_ID             | No               | edu-mailcow-sync                                    | Client-ID for login in keycloak |
 ||
 | KEYCLOAK_SECRET_KEY            | Yes               |                                                    | Secret-Key for login in keycloak |
 ||
 | MAILCOW_HOSTNAME               | Yes               |                                                    | Hostname of the mailserver (eg. mail.demo.multi.schule) |
-| MAILCOW_PATH                   | Yes               | /srv/docker/edulution-mail                         | Mailcow path: Should always set to "/srv/docker/edulution-mail" |
+| MAILCOW_PATH                   | Yes               |                                                    | Mailcow path: Should always set to "/srv/docker/edulution-mail" |
 
 ## Manual deployment
 

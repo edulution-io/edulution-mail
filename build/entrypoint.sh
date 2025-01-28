@@ -14,8 +14,10 @@ trap on_stop SIGINT
 function set_mailcow_token() {
   # Create API User for Mailcow
   if [ ! -f ${MAILCOW_PATH}/data/mailcow-token.conf ]; then
-    echo "==== Generating API user for mailcow... ===="
-    MAILCOW_API_TOKEN=$(openssl rand -hex 15 | awk '{printf "%s-%s-%s-%s-%s\n", substr($0,1,6), substr($0,7,6), substr($0,13,6), substr($0,19,6), substr($0,25,6)}')
+    if [ -z ${MAILCOW_API_TOKEN} ]; then
+      echo "==== Generating API user for mailcow... ===="
+      MAILCOW_API_TOKEN=$(openssl rand -hex 15 | awk '{printf "%s-%s-%s-%s-%s\n", substr($0,1,6), substr($0,7,6), substr($0,13,6), substr($0,19,6), substr($0,25,6)}')
+    fi
     echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
     source ${MAILCOW_PATH}/mailcow/.env
     mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
