@@ -5,6 +5,11 @@
     color: rgb(26, 26, 28);
 }
 
+/* Fix color of an highlighted mail after it has lost the selection */
+md-list-item.sg-star-bg {
+    background-color: rgba(255, 255, 200, 0.1);
+}
+
 /* --------------------------------------------------- */
 /* DESTRUCTURED FIRST LINE - DEFAULT THEME WITHOUT HUE */
 /* --------------------------------------------------- */
