@@ -39,9 +39,10 @@ function init() {
   echo "===== Preparing Mailcow Instance ====="
   rm -rf ${MAILCOW_PATH}/mailcow
   mkdir -p ${MAILCOW_PATH}/mailcow/data
-  cp -r /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
-  cp -r /opt/mailcow/docker-compose.yml ${MAILCOW_PATH}/mailcow/
-  cp -r /opt/mailcow/generate_config.sh ${MAILCOW_PATH}/mailcow/
+  cp -r /opt/mailcow/. ${MAILCOW_PATH}/mailcow/
+  #cp -r /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
+  #cp -r /opt/mailcow/docker-compose.yml ${MAILCOW_PATH}/mailcow/
+  #cp -r /opt/mailcow/generate_config.sh ${MAILCOW_PATH}/mailcow/
 
   echo "==== Applying template files for the authentification... ===="
 
