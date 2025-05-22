@@ -73,6 +73,7 @@ function init() {
       mv mailcow.conf ${MAILCOW_PATH}/data/
   fi
 
+  rm -rf ${MAILCOW_PATH}/mailcow/.env
   ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/.env
 
   mkdir -p ${MAILCOW_PATH}/data/mail
