@@ -43,22 +43,7 @@ function init() {
   #cp -r /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
   #cp -r /opt/mailcow/docker-compose.yml ${MAILCOW_PATH}/mailcow/
   #cp -r /opt/mailcow/generate_config.sh ${MAILCOW_PATH}/mailcow/
-
-  echo "==== Applying template files for the authentification... ===="
-
-  mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/
-  cp /templates/dovecot/edulution-sso.lua ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/edulution-sso.lua
-  cp /templates/dovecot/extra.conf ${MAILCOW_PATH}/mailcow/data/conf/dovecot/extra.conf
-  chown root:401 ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/edulution-sso.lua
-
-  mkdir -p ${MAILCOW_PATH}/mailcow/data/web/inc/
-  cp /templates/web/functions.inc.php ${MAILCOW_PATH}/mailcow/data/web/inc/functions.inc.php
-  cp /templates/web/sogo-auth.php ${MAILCOW_PATH}/mailcow/data/web/sogo-auth.php
-
-  mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
-  cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
-  cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
-
+  
   cd ${MAILCOW_PATH}/mailcow
 
   echo "==== Generating Mailcow config, if does not exist... ===="
@@ -75,6 +60,7 @@ function init() {
 
   rm -rf ${MAILCOW_PATH}/mailcow/.env
   ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/.env
+  ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/mailcow.conf
 
   mkdir -p ${MAILCOW_PATH}/data/mail
 
@@ -111,6 +97,23 @@ function apply_docker_network() {
   docker network connect --alias edulution-traefik mailcowdockerized_mailcow-network edulution-traefik
 }
 
+function apply_templates() {
+  echo "==== Applying template files for the authentification... ===="
+
+  mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/
+  cp /templates/dovecot/edulution-sso.lua ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/edulution-sso.lua
+  cp /templates/dovecot/extra.conf ${MAILCOW_PATH}/mailcow/data/conf/dovecot/extra.conf
+  chown root:401 ${MAILCOW_PATH}/mailcow/data/conf/dovecot/lua/edulution-sso.lua
+
+  mkdir -p ${MAILCOW_PATH}/mailcow/data/web/inc/
+  cp /templates/web/functions.inc.php ${MAILCOW_PATH}/mailcow/data/web/inc/functions.inc.php
+  cp /templates/web/sogo-auth.php ${MAILCOW_PATH}/mailcow/data/web/sogo-auth.php
+
+  mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
+  cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+  cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+}
+
 cat <<EOF
   _____ ____  _   _ _    _   _ _____ ___ ___  _   _       __  __    _    ___ _     
  | ____|  _ \| | | | |  | | | |_   _|_ _/ _ \| \ | |     |  \/  |  / \  |_ _| |    
@@ -131,6 +134,8 @@ fi
 init
 
 pull_and_start_mailcow
+
+apply_templates
 
 apply_docker_network
 
