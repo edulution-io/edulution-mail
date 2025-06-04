@@ -133,9 +133,9 @@ fi
 
 init
 
-pull_and_start_mailcow
-
 apply_templates
+
+pull_and_start_mailcow
 
 apply_docker_network
 
