@@ -191,7 +191,7 @@ done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
   echo "ERROR: Mailcow did not become ready within timeout period"
-  exit 1
+  
 fi
 
 set_mailcow_token
