@@ -20,26 +20,7 @@ function set_mailcow_token() {
     fi
     echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
     source ${MAILCOW_PATH}/mailcow/.env
-    # Wait for MySQL to be ready and api table to exist
-    echo "Waiting for MySQL and api table to be ready..."
-    while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "DESCRIBE api" >/dev/null 2>&1; do
-      echo "MySQL/api table not ready yet..."
-      sleep 5
-    done
-    
-    echo "MySQL and api table are ready, inserting API token..."
-    
-    # Insert API token
-    if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')" 2>/dev/null; then
-      echo "API token successfully inserted into database"
-    else
-      # Check if token already exists
-      if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "SELECT api_key FROM api WHERE api_key='${MAILCOW_API_TOKEN}'" | grep -q "${MAILCOW_API_TOKEN}"; then
-        echo "API token already exists in database"
-      else
-        echo "ERROR: Failed to insert API token into database"
-      fi
-    fi
+    mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
   else
     source ${MAILCOW_PATH}/data/mailcow-token.conf
   fi
@@ -82,6 +63,26 @@ function init() {
   ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/mailcow.conf
 
   mkdir -p ${MAILCOW_PATH}/data/mail
+
+  echo "==== Add docker override for mailcow... ===="
+
+  cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
+services:
+  nginx-mailcow:
+    ports: !override
+      - 8443:443
+  sogo-mailcow:
+    volumes:
+      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
+      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
+
+volumes:
+  vmail-vol-1:
+    driver_opts:
+      type: none
+      device: ${MAILCOW_PATH}/data/mail
+      o: bind
+EOF
 }
 
 function pull_and_start_mailcow() {
@@ -111,26 +112,6 @@ function apply_templates() {
   mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
   cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
   cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
-
-  echo "==== Add docker override for mailcow... ===="
-
-  cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
-services:
-  nginx-mailcow:
-    ports: !override
-      - 8443:443
-  sogo-mailcow:
-    volumes:
-      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
-      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
-
-volumes:
-  vmail-vol-1:
-    driver_opts:
-      type: none
-      device: ${MAILCOW_PATH}/data/mail
-      o: bind
-EOF
 }
 
 cat <<EOF
@@ -158,42 +139,13 @@ apply_templates
 
 apply_docker_network
 
+set_mailcow_token
+
 echo "==== Waiting for mailcow to come up... ===="
 
-# First connect to mailcow network to reach nginx
-echo "Connecting to mailcow network..."
-docker network connect mailcowdockerized_mailcow-network ${HOSTNAME} 2>/dev/null || true
-
-# Wait for nginx to be ready
-while ! curl -s -k --head --request GET --max-time 2 "https://nginx-mailcow/" 2>/dev/null | grep -q "HTTP/"; do
-  echo "Waiting for nginx-mailcow to be ready..."
-  sleep 2
+while ! curl -s -k --head --request GET --max-time 2 "https://nginx/api/v1/get" | grep -q "HTTP/"; do
+  echo "[...]"
+  sleep 1
 done
-
-MAILCOW_URL="https://nginx-mailcow"
-echo "Nginx is ready on ${MAILCOW_URL}"
-
-echo "Waiting for mailcow to be fully initialized..."
-
-# Simple wait for mailcow to be ready
-MAX_RETRIES=30
-RETRY_COUNT=0
-while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  if curl -s -k --max-time 5 "${MAILCOW_URL}/api/v1/get/mailbox/all" 2>/dev/null | grep -q "mailbox"; then
-    echo "Mailcow API is ready!"
-    break
-  else
-    echo "Waiting for mailcow API..."
-  fi
-  
-  RETRY_COUNT=$((RETRY_COUNT + 1))
-  sleep 5
-done
-
-if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-  echo "WARNING: Mailcow API check timed out, trying to set token anyway..."
-fi
-
-set_mailcow_token
 
 start
