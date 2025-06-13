@@ -82,26 +82,6 @@ function init() {
   ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/mailcow.conf
 
   mkdir -p ${MAILCOW_PATH}/data/mail
-
-  echo "==== Add docker override for mailcow... ===="
-
-  cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
-services:
-  nginx-mailcow:
-    ports: !override
-      - 8443:443
-  sogo-mailcow:
-    volumes:
-      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
-      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
-
-volumes:
-  vmail-vol-1:
-    driver_opts:
-      type: none
-      device: ${MAILCOW_PATH}/data/mail
-      o: bind
-EOF
 }
 
 function pull_and_start_mailcow() {
@@ -131,6 +111,26 @@ function apply_templates() {
   mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
   cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
   cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+
+  echo "==== Add docker override for mailcow... ===="
+
+  cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
+services:
+  nginx-mailcow:
+    ports: !override
+      - 8443:443
+  sogo-mailcow:
+    volumes:
+      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
+      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
+
+volumes:
+  vmail-vol-1:
+    driver_opts:
+      type: none
+      device: ${MAILCOW_PATH}/data/mail
+      o: bind
+EOF
 }
 
 cat <<EOF
