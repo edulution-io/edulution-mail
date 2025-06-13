@@ -161,9 +161,13 @@ apply_docker_network
 
 echo "==== Waiting for mailcow to come up... ===="
 
+# First connect to mailcow network to reach nginx
+echo "Connecting to mailcow network..."
+docker network connect mailcowdockerized_mailcow-network ${HOSTNAME} 2>/dev/null || true
+
 # Wait for nginx to be ready
-while ! curl -s -k --head --request GET --max-time 2 "https://nginx/" 2>/dev/null | grep -q "HTTP/"; do
-  echo "Waiting for nginx to be ready..."
+while ! curl -s -k --head --request GET --max-time 2 "https://nginx-mailcow/" 2>/dev/null | grep -q "HTTP/"; do
+  echo "Waiting for nginx-mailcow to be ready..."
   sleep 2
 done
 
@@ -173,10 +177,10 @@ echo "Nginx is ready, checking if mailcow is fully initialized..."
 MAX_RETRIES=60
 RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  API_RESPONSE=$(curl -s -k --max-time 5 "https://nginx/api/v1/get/status/containers" 2>/dev/null || echo "")
+  API_RESPONSE=$(curl -s -k --max-time 5 "https://nginx-mailcow/api/v1/get/mailbox/all" 2>/dev/null || echo "")
   
   # Check if we get a proper JSON response (not the preparing page)
-  if echo "$API_RESPONSE" | grep -q "container"; then
+  if echo "$API_RESPONSE" | grep -q "mailbox"; then
     echo "Mailcow API is ready!"
     break
   elif echo "$API_RESPONSE" | grep -q "Preparing"; then
@@ -190,8 +194,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-  echo "ERROR: Mailcow did not become ready within timeout period"
-  
+  echo "WARNING: Mailcow did not become ready within timeout period, trying to set token anyway..."
 fi
 
 set_mailcow_token
