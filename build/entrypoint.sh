@@ -139,6 +139,45 @@ apply_templates
 
 apply_docker_network
 
+<<<<<<< Updated upstream
+=======
+echo "==== Waiting for mailcow to come up... ===="
+
+# First connect to mailcow network to reach nginx
+echo "Connecting to mailcow network..."
+docker network connect mailcowdockerized_mailcow-network ${HOSTNAME} 2>/dev/null || true
+
+# Wait for nginx to be ready
+while ! curl -s -k --head --request GET --max-time 2 "https://nginx-mailcow/" 2>/dev/null | grep -q "HTTP/"; do
+  echo "Waiting for nginx-mailcow to be ready..."
+  sleep 2
+done
+
+MAILCOW_URL="https://nginx-mailcow"
+echo "Nginx is ready on ${MAILCOW_URL}"
+
+echo "Waiting for mailcow to be fully initialized..."
+
+# Simple wait for mailcow to be ready
+MAX_RETRIES=30
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  if curl -s -k --max-time 5 "${MAILCOW_URL}/api/v1/get/mailbox/all" 2>/dev/null | grep -q "mailbox"; then
+    echo "Mailcow API is ready!"
+    break
+  else
+    echo "Waiting for mailcow API..."
+  fi
+  
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  sleep 5
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "WARNING: Mailcow API check timed out, trying to set token anyway..."
+fi
+
+>>>>>>> Stashed changes
 set_mailcow_token
 
 echo "==== Waiting for mailcow to come up... ===="
