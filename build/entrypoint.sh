@@ -177,6 +177,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
   
   # Check if we get a proper JSON response (not the preparing page)
   if echo "$API_RESPONSE" | grep -q "container"; then
+    echo "Mailcow API is ready!"
     break
   elif echo "$API_RESPONSE" | grep -q "Preparing"; then
     echo "Mailcow is still preparing..."
