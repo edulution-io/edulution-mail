@@ -20,7 +20,26 @@ function set_mailcow_token() {
     fi
     echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
     source ${MAILCOW_PATH}/mailcow/.env
-    mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
+    # Wait for MySQL to be ready and api table to exist
+    echo "Waiting for MySQL and api table to be ready..."
+    while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "DESCRIBE api" >/dev/null 2>&1; do
+      echo "MySQL/api table not ready yet..."
+      sleep 5
+    done
+    
+    echo "MySQL and api table are ready, inserting API token..."
+    
+    # Insert API token
+    if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')" 2>/dev/null; then
+      echo "API token successfully inserted into database"
+    else
+      # Check if token already exists
+      if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "SELECT api_key FROM api WHERE api_key='${MAILCOW_API_TOKEN}'" | grep -q "${MAILCOW_API_TOKEN}"; then
+        echo "API token already exists in database"
+      else
+        echo "ERROR: Failed to insert API token into database"
+      fi
+    fi
   else
     source ${MAILCOW_PATH}/data/mailcow-token.conf
   fi
@@ -139,8 +158,6 @@ apply_templates
 
 apply_docker_network
 
-<<<<<<< Updated upstream
-=======
 echo "==== Waiting for mailcow to come up... ===="
 
 # First connect to mailcow network to reach nginx
@@ -177,14 +194,6 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
   echo "WARNING: Mailcow API check timed out, trying to set token anyway..."
 fi
 
->>>>>>> Stashed changes
 set_mailcow_token
-
-echo "==== Waiting for mailcow to come up... ===="
-
-while ! curl -s -k --head --request GET --max-time 2 "https://nginx/api/v1/get" | grep -q "HTTP/"; do
-  echo "[...]"
-  sleep 1
-done
 
 start
