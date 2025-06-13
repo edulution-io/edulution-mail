@@ -59,7 +59,7 @@ function init() {
   echo "==== Generating Mailcow config, if does not exist... ===="
 
   export MAILCOW_TZ=${MAILCOW_TZ:-Europe/Berlin}
-  export MAILCOW_BRANCH=${MAILCOW_BRANCH:-master}
+  export MAILCOW_BRANCH=${MAILCOW_BRANCH:-legacy}
 
   if [ ! -f ${MAILCOW_PATH}/data/mailcow.conf ]; then
       source ./generate_config.sh
