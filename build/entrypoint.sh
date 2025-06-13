@@ -21,16 +21,26 @@ function set_mailcow_token() {
     echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
     source ${MAILCOW_PATH}/mailcow/.env
     
-    # Wait for MySQL to be ready
-    echo "Waiting for MySQL to be ready..."
-    while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "SELECT 1" >/dev/null 2>&1; do
-      echo "MySQL not ready yet..."
-      sleep 2
+    # Wait for MySQL to be ready and api table to exist
+    echo "Waiting for MySQL and api table to be ready..."
+    while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "DESCRIBE api" >/dev/null 2>&1; do
+      echo "MySQL/api table not ready yet..."
+      sleep 5
     done
     
-    # Insert API token, ignore if already exists
-    mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT IGNORE INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
-    echo "API token configured in database"
+    echo "MySQL and api table are ready, inserting API token..."
+    
+    # Insert API token
+    if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')" 2>/dev/null; then
+      echo "API token successfully inserted into database"
+    else
+      # Check if token already exists
+      if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "SELECT api_key FROM api WHERE api_key='${MAILCOW_API_TOKEN}'" | grep -q "${MAILCOW_API_TOKEN}"; then
+        echo "API token already exists in database"
+      else
+        echo "ERROR: Failed to insert API token into database"
+      fi
+    fi
   else
     source ${MAILCOW_PATH}/data/mailcow-token.conf
   fi
@@ -151,10 +161,37 @@ apply_docker_network
 
 echo "==== Waiting for mailcow to come up... ===="
 
-while ! curl -s -k --head --request GET --max-time 2 "https://nginx/api/v1/get" | grep -q "HTTP/"; do
-  echo "[...]"
-  sleep 1
+# Wait for nginx to be ready
+while ! curl -s -k --head --request GET --max-time 2 "https://nginx/" 2>/dev/null | grep -q "HTTP/"; do
+  echo "Waiting for nginx to be ready..."
+  sleep 2
 done
+
+echo "Nginx is ready, checking if mailcow is fully initialized..."
+
+# Wait for mailcow API to be ready (not just nginx)
+MAX_RETRIES=60
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  API_RESPONSE=$(curl -s -k --max-time 5 "https://nginx/api/v1/get/status/containers" 2>/dev/null || echo "")
+  
+  # Check if we get a proper JSON response (not the preparing page)
+  if echo "$API_RESPONSE" | grep -q "container"; then
+    break
+  elif echo "$API_RESPONSE" | grep -q "Preparing"; then
+    echo "Mailcow is still preparing..."
+  else
+    echo "Waiting for mailcow API to be ready..."
+  fi
+  
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  sleep 5
+done
+
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+  echo "ERROR: Mailcow did not become ready within timeout period"
+  exit 1
+fi
 
 set_mailcow_token
 
