@@ -20,7 +20,17 @@ function set_mailcow_token() {
     fi
     echo "MAILCOW_API_TOKEN=${MAILCOW_API_TOKEN}" > ${MAILCOW_PATH}/data/mailcow-token.conf
     source ${MAILCOW_PATH}/mailcow/.env
-    mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
+    
+    # Wait for MySQL to be ready
+    echo "Waiting for MySQL to be ready..."
+    while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "SELECT 1" >/dev/null 2>&1; do
+      echo "MySQL not ready yet..."
+      sleep 2
+    done
+    
+    # Insert API token, ignore if already exists
+    mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT IGNORE INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')"
+    echo "API token configured in database"
   else
     source ${MAILCOW_PATH}/data/mailcow-token.conf
   fi
@@ -63,26 +73,6 @@ function init() {
   ln -s ${MAILCOW_PATH}/data/mailcow.conf ${MAILCOW_PATH}/mailcow/mailcow.conf
 
   mkdir -p ${MAILCOW_PATH}/data/mail
-
-  echo "==== Add docker override for mailcow... ===="
-
-  cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
-services:
-  nginx-mailcow:
-    ports: !override
-      - 8443:443
-  sogo-mailcow:
-    volumes:
-      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
-      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
-
-volumes:
-  vmail-vol-1:
-    driver_opts:
-      type: none
-      device: ${MAILCOW_PATH}/data/mail
-      o: bind
-EOF
 }
 
 function pull_and_start_mailcow() {
@@ -112,6 +102,26 @@ function apply_templates() {
   mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
   cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
   cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+
+  echo "==== Add docker override for mailcow... ===="
+
+  cat <<EOF > ${MAILCOW_PATH}/mailcow/docker-compose.override.yml
+services:
+  nginx-mailcow:
+    ports: !override
+      - 8443:443
+  sogo-mailcow:
+    volumes:
+      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
+      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
+
+volumes:
+  vmail-vol-1:
+    driver_opts:
+      type: none
+      device: ${MAILCOW_PATH}/data/mail
+      o: bind
+EOF
 }
 
 cat <<EOF
@@ -139,13 +149,13 @@ pull_and_start_mailcow
 
 apply_docker_network
 
-set_mailcow_token
-
 echo "==== Waiting for mailcow to come up... ===="
 
 while ! curl -s -k --head --request GET --max-time 2 "https://nginx/api/v1/get" | grep -q "HTTP/"; do
   echo "[...]"
   sleep 1
 done
+
+set_mailcow_token
 
 start
