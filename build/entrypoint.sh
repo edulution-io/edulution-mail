@@ -90,6 +90,20 @@ function init() {
 
 function pull_and_start_mailcow() {
   echo "==== Downloading and starting mailcow... ===="
+  
+  # Ensure SOGo files exist before starting containers
+  if [ ! -f "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ] || [ ! -f "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ]; then
+    echo "SOGo files missing, recreating them..."
+    mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
+    
+    # Remove if they exist as directories (in case of misconfiguration)
+    [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+    [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+    
+    cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+    cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+  fi
+  
   docker compose pull -q 2>&1 > /dev/null
   docker compose up -d --quiet-pull 2>&1 > /dev/null
 }
@@ -115,6 +129,11 @@ function apply_templates() {
   cp /templates/web/sogo-auth.php ${MAILCOW_PATH}/mailcow/data/web/sogo-auth.php
 
   mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
+  
+  # Remove if they exist as directories (in case of misconfiguration)
+  [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+  [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+  
   cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
   cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
 
@@ -150,6 +169,20 @@ EOF
 
 if docker compose --project-directory "${MAILCOW_PATH}/mailcow/" ps | grep -q 'mailcow'; then
   echo "! Mailcow is already running. Only starting api and sync..."
+  
+  # Ensure SOGo files exist even when mailcow is already running
+  if [ ! -f "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ] || [ ! -f "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ]; then
+    echo "SOGo files missing, recreating them..."
+    mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
+    
+    # Remove if they exist as directories (in case of misconfiguration)
+    [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+    [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+    
+    cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
+    cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
+  fi
+  
   set_mailcow_token
   apply_docker_network
   start
