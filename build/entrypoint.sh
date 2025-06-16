@@ -1,9 +1,11 @@
 #!/bin/bash
 
 function on_stop() {
-    echo "Container has been stopped! Stopping mailcow an cleanup system..."
+    echo "Container has been stopped! Stopping mailcow..."
     docker compose --project-directory ${MAILCOW_PATH}/mailcow/ down
-    rm -rf ${MAILCOW_PATH}/mailcow
+    # DISABLED: Deleting mailcow directory on shutdown causes data loss
+    # This was the reason why 'docker compose down' deleted folder contents
+    # rm -rf ${MAILCOW_PATH}/mailcow
     echo "Finished!"
     exit 0
 }
@@ -57,7 +59,8 @@ function start() {
 
 function init() {
   echo "===== Preparing Mailcow Instance ====="
-  rm -rf ${MAILCOW_PATH}/mailcow
+  # DISABLED: This also deletes existing mailcow data during startup
+  # rm -rf ${MAILCOW_PATH}/mailcow
   mkdir -p ${MAILCOW_PATH}/mailcow/data
   cp -r /opt/mailcow/. ${MAILCOW_PATH}/mailcow/
   #cp -r /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
