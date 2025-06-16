@@ -95,6 +95,8 @@ function apply_docker_network() {
   docker network connect --alias edulution mailcowdockerized_mailcow-network ${HOSTNAME}
   docker network connect --alias edulution edulution-ui_default ${HOSTNAME}
   docker network connect --alias edulution-traefik mailcowdockerized_mailcow-network edulution-traefik
+  # Add nginx alias for backward compatibility
+  docker network connect --alias nginx mailcowdockerized_mailcow-network mailcowdockerized-nginx-mailcow-1 2>/dev/null || true
 }
 
 function apply_templates() {
