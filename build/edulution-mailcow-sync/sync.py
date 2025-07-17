@@ -80,19 +80,20 @@ class EdulutionMailcowSync:
             if not self._addDomain(maildomain, domainList):
                 continue
 
-            self._addMailbox({
-                "email": mail,
-                "firstName": group["name"],
-                "lastName": "(list)",
-                "attributes": {
-                    "sophomorixMailQuotaCalculated": [ 1 ],
-                    "sophomorixStatus": "G"
-                }
-            }, mailboxList)
+            # self._addMailbox({
+            #     "email": mail,
+            #     "firstName": group["name"],
+            #     "lastName": "(list)",
+            #     "attributes": {
+            #         "sophomorixMailQuotaCalculated": [ 1 ],
+            #         "sophomorixStatus": "G"
+            #     }
+            # }, mailboxList)
 
+            self._addAlias(mail, membermails, aliasList)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
 
-            self._addListFilter(mail, membermails, filterList)
+            # self._addListFilter(mail, membermails, filterList)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
             logging.info("  * Everything is up-to-date!")
@@ -106,6 +107,15 @@ class EdulutionMailcowSync:
         logging.info("* 3. Syncing deltas to mailcow")
 
         # 1. Delete items
+
+        # self.mailcow.killElementsOfType(
+        #     "filter", mailcowFilters.killQueue())
+        # self.mailcow.killElementsOfType(
+        #     "alias", mailcowAliases.killQueue())
+        # self.mailcow.killElementsOfType(
+        #     "mailbox", mailcowMailboxes.killQueue())
+        # self.mailcow.killElementsOfType(
+        #     "domain", mailcowDomains.killQueue())
 
         # 2. Domain(s) add and update
 
@@ -195,27 +205,28 @@ class EdulutionMailcowSync:
 
         return True
 
-    def _addAlias(self, alias: str, goto: str, aliasList: AliasListStorage) -> bool:
+    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage) -> bool:
+        goto_targets = ",".join(goto) if isinstance(goto, list) else goto
         return aliasList.addElement({
             "address": alias,
-            "goto": goto,
+            "goto": goto_targets,
             "active": 1,
             "sogo_visible": 1
         }, alias)
 
-    def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):
-        scriptData = "### Auto-generated mailinglist filter by linuxmuster ###\r\n\r\n"
-        scriptData += "require \"copy\";\r\n\r\n"
-        for memberAddress in memberAddresses:
-            scriptData += f"redirect :copy \"{memberAddress}\";\r\n"
-        scriptData += "\r\ndiscard;stop;"
-        return filterList.addElement({
-            'active': 1,
-            'username': listAddress,
-            'filter_type': 'prefilter',
-            'script_data': scriptData,
-            'script_desc': f"Auto-generated mailinglist filter for {listAddress}"
-        }, listAddress)
+    # def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):
+    #     scriptData = "### Auto-generated mailinglist filter by linuxmuster ###\r\n\r\n"
+    #     scriptData += "require \"copy\";\r\n\r\n"
+    #     for memberAddress in memberAddresses:
+    #         scriptData += f"redirect :copy \"{memberAddress}\";\r\n"
+    #     scriptData += "\r\ndiscard;stop;"
+    #     return filterList.addElement({
+    #         'active': 1,
+    #         'username': listAddress,
+    #         'filter_type': 'prefilter',
+    #         'script_data': scriptData,
+    #         'script_desc': f"Auto-generated mailinglist filter for {listAddress}"
+    #     }, listAddress)
 
 if __name__ == "__main__":
     try:
