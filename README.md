@@ -52,3 +52,17 @@ docker run -d \
   -e KEYCLOAK_SECRET_KEY=UIZvGG0JVDZaUEvLElwBfuqA64gMWTIl \
   ghcr.io/edulution-io/edulution-mail
 ```
+
+## Override environment variables
+
+You can override the environment variables in the **mail.override.config** file in the MAILCOW_PATH directory. The file must be in JSON format and can look like this:
+
+```
+{
+  "DEFAULT_USER_QUOTA": 1000,
+  "GROUPS_TO_SYNC": "role-schooladministrator,role-teacher,role-student",
+  "DOMAIN_QUOTA": 10240,
+  "ENABLE_GAL": 1,
+  "SYNC_INTERVAL": 300
+}
+```

@@ -143,7 +143,7 @@ class EdulutionMailcowSync:
     
     def _readConfig(self) -> ConfigurationStorage:
         config = ConfigurationStorage()
-        config.importFromEnvironment()
+        config.load()
         return config
 
     def _addDomain(self, domainName: str, domainList: DomainListStorage) -> bool:
