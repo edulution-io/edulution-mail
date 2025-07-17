@@ -39,13 +39,21 @@ class EdulutionMailcowSync:
 
         logging.info("* 1. Loading data from mailcow and keycloak")
 
-        domainList.loadRawData(self.mailcow.getDomains())
-        mailboxList.loadRawData(self.mailcow.getMailboxes())
-        aliasList.loadRawData(self.mailcow.getAliases())
-        filterList.loadRawData(self.mailcow.getFilters())
+        try:
+            domainList.loadRawData(self.mailcow.getDomains())
+            mailboxList.loadRawData(self.mailcow.getMailboxes())
+            aliasList.loadRawData(self.mailcow.getAliases())
+            filterList.loadRawData(self.mailcow.getFilters())
+        except Exception as e:
+            logging.error(f"Failed to load data from mailcow: {e}")
+            return False
         
-        users = self.keycloak.getUsers()
-        groups = self.keycloak.getGroups()
+        try:
+            users = self.keycloak.getUsers()
+            groups = self.keycloak.getGroups()
+        except Exception as e:
+            logging.error(f"Failed to load data from keycloak: {e}")
+            return False
 
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
 
