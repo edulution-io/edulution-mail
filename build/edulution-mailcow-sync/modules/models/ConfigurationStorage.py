@@ -46,8 +46,12 @@ class ConfigurationStorage:
             logging.info("==========================================================")
             logging.info(f"OVERRIDE FILE FOUND: {OVERRIDE_FILE}")
 
-            with open(OVERRIDE_FILE, "r") as f:
-                override_config = json.load(f)
+            try:
+                with open(OVERRIDE_FILE, "r") as f:
+                    override_config = json.load(f)
+            except Exception as e:
+                logging.error(f"[!] Failed to load override file: {e}")
+                return
 
             if "DEFAULT_USER_QUOTA" in override_config:
                 logging.info(f"* OVERRIDE DEFAULT_USER_QUOTA: {self.DEFAULT_USER_QUOTA} with {override_config['DEFAULT_USER_QUOTA']}")
