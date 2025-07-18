@@ -27,6 +27,7 @@ class EdulutionMailcowSync:
                 exit(1)
             else:
                 logging.info("=== Sync finished successfully ===")
+                logging.info(f"\n=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===\n")
                 time.sleep(self._config.SYNC_INTERVAL)
 
     def _sync(self) -> bool:
