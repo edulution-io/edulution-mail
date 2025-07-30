@@ -66,3 +66,13 @@ You can override the environment variables in the **mail.override.config** file 
   "SYNC_INTERVAL": 300
 }
 ```
+
+## Temporarily disable sync
+
+If you want to temporarily disable the sync (eg. for backup or restore) you can create a file called **DISABLE_SYNC** in the MAILCOW_PATH directory.
+
+```bash
+touch /srv/docker/edulution-mail/DISABLE_SYNC
+```
+
+The sync will check if the file exists on every run (see SYNC_INTERVAL) and skip the sync if the file exists.

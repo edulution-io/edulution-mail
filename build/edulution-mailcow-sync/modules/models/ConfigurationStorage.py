@@ -24,6 +24,8 @@ class ConfigurationStorage:
         self.KEYCLOAK_SECRET_KEY = os.environ.get("KEYCLOAK_SECRET_KEY", False)
         self.KEYCLOAK_SERVER_URL = os.environ.get("KEYCLOAK_SERVER_URL", "https://edulution-traefik/auth/")
 
+        self.MAILCOW_PATH = os.environ.get("MAILCOW_PATH", "/srv/docker/edulution-mail")
+
         if not self.KEYCLOAK_SECRET_KEY:
             logging.error("!!! ERROR !!!")
             logging.error("Environment variables for mailcow or keycloak are not set! Please refere the documentation!")

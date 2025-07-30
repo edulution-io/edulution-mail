@@ -4,6 +4,7 @@ import random
 import string
 import time
 import logging
+import os
 
 from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage
 
@@ -32,6 +33,12 @@ class EdulutionMailcowSync:
 
     def _sync(self) -> bool:
         logging.info("=== Starting Edulution-Mailcow-Sync ===")
+
+        if os.path.exists(self._config.MAILCOW_PATH + "/DISABLE_SYNC"):
+            logging.info("\n========================================================")
+            logging.info("* Sync disabled by DISABLE_SYNC file in mailcow path!")
+            logging.info("========================================================\n")
+            return True
 
         domainList = DomainListStorage()
         mailboxList = MailboxListStorage(domainList)
