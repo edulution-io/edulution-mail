@@ -28,16 +28,20 @@ class EdulutionMailcowSync:
                 exit(1)
             else:
                 logging.info("=== Sync finished successfully ===")
-                logging.info(f"\n=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===\n")
+                logging.info("")
+                logging.info(f"=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===")
+                logging.info("")
                 time.sleep(self._config.SYNC_INTERVAL)
 
     def _sync(self) -> bool:
         logging.info("=== Starting Edulution-Mailcow-Sync ===")
 
         if os.path.exists(self._config.MAILCOW_PATH + "/DISABLE_SYNC"):
-            logging.info("\n========================================================")
+            logging.info("")
+            logging.info("========================================================")
             logging.info("* Sync disabled by DISABLE_SYNC file in mailcow path!")
-            logging.info("========================================================\n")
+            logging.info("========================================================")
+            logging.info("")
             return True
 
         domainList = DomainListStorage()
