@@ -214,7 +214,7 @@ echo "Nginx is ready, checking if mailcow is fully initialized..."
 MAX_RETRIES=60
 RETRY_COUNT=0
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-  API_RESPONSE=$(curl -s -k --max-time 5 "https://nginx-mailcow/api/v1/get/mailbox/all" 2>/dev/null || echo "")
+  API_RESPONSE=$(curl -s -k --max-time 5 -H "X-API-Key: ${MAILCOW_API_TOKEN}" --ipv4 "https://nginx-mailcow/api/v1/get/domain/all" 2>/dev/null || echo "")
   
   # Check if we get a proper JSON response (not the preparing page)
   if echo "$API_RESPONSE" | grep -q "mailbox"; then
