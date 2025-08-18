@@ -87,6 +87,9 @@ class EdulutionMailcowSync:
             membermails = []
             for member in group["members"]:
                 if self.keycloak.checkGroupMembershipForUser(member["id"], self._config.GROUPS_TO_SYNC):
+                    if "email"  not in member:
+                        logging.error(f"    -> Member {member['id']} ({member.get('username', 'n/a')}) has not email attribute!")
+                        continue
                     membermails.append(member["email"])
 
             if not self._addDomain(maildomain, domainList):
