@@ -59,13 +59,12 @@ function start() {
 
 function init() {
   echo "===== Preparing Mailcow Instance ====="
-  # DISABLED: This also deletes existing mailcow data during startup
-  # rm -rf ${MAILCOW_PATH}/mailcow
+  
   mkdir -p ${MAILCOW_PATH}/mailcow/data
-  cp -r /opt/mailcow/. ${MAILCOW_PATH}/mailcow/
-  #cp -r /opt/mailcow/data ${MAILCOW_PATH}/mailcow/
-  #cp -r /opt/mailcow/docker-compose.yml ${MAILCOW_PATH}/mailcow/
-  #cp -r /opt/mailcow/generate_config.sh ${MAILCOW_PATH}/mailcow/
+  
+  if [ ! -f ${MAILCOW_PATH}/mailcow/docker-compose.yml]; then
+      cp -r /opt/mailcow/. ${MAILCOW_PATH}/mailcow/
+  fi
   
   cd ${MAILCOW_PATH}/mailcow
 
