@@ -62,7 +62,7 @@ function init() {
   
   mkdir -p ${MAILCOW_PATH}/mailcow/data
   
-  if [ ! -f ${MAILCOW_PATH}/mailcow/docker-compose.yml]; then
+  if [ ! -f ${MAILCOW_PATH}/mailcow/docker-compose.yml ]; then
       cp -r /opt/mailcow/. ${MAILCOW_PATH}/mailcow/
   fi
   
