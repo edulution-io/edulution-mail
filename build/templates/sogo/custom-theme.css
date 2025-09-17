@@ -75,11 +75,53 @@
     --dark-muted-dialog: #1e293b;
 }
 
-/* Fix input color of the new mail input */
-.ck-editor__editable,
-.cke_editable {
-    background-color: var(--dark-background);
-    color: var(--dark-accent);
+md-dialog[ui-view=maileditor].sg-mail-editor[flex="100"] {
+    height: 100vw;
+}
+
+md-dialog[ui-view=maileditor].sg-mail-editor[flex="60"] {
+    height: 70vw;
+}
+
+md-dialog[ui-view=maileditor].sg-mail-editor {
+    form.ng-pristine {
+        height: 100%;
+
+        md-dialog-content {
+            height: 100%;
+
+            md-input-container.sg-mail-editor-content {
+                height: calc(100% - 190px);
+
+                sg-ckeditor {
+                    height: 100%;
+                    background-color: var(--dark-background);
+                    color: var(--dark-accent);
+
+                    div.ck-editor {
+                        min-height: 300px;
+                        height: 100%;
+                        max-height: 100%;
+
+                        .ck-editor__main {
+                            min-height: 300px;
+                            height: 100%;
+                            max-height: 100%;
+
+                            div.ck-content.ck-editor__editable.ck-editor__editable_inline {
+                                min-height: 300px;
+                                height: 100%;
+
+                                p {
+                                    color: var(--dark-foreground);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 a,
@@ -592,7 +634,7 @@ md-list md-list-item>md-icon {
 
 md-list.md-default-theme md-list-item>md-icon.md-highlight,
 md-list md-list-item>md-icon.md-highlight {
-    color: var(--dark-accent-light);
+    color: var(--dark-primary-foreground);
 }
 
 md-menu-content.md-default-theme md-menu-item,
@@ -630,7 +672,7 @@ md-menu-content .md-menu>.md-button:after {
 
 md-toolbar.md-default-theme.md-menu-toolbar md-toolbar-filler,
 md-toolbar.md-menu-toolbar md-toolbar-filler {
-    background-color: var(--dark-accent-light);
+    background-color: var(--dark-overlay);
     color: var(--dark-primary-foreground);
 }
 
@@ -651,7 +693,7 @@ md-nav-bar .md-button._md-nav-button[disabled] {
 
 md-nav-bar.md-default-theme.md-primary>.md-nav-bar,
 md-nav-bar.md-primary>.md-nav-bar {
-    background-color: var(--dark-accent-light);
+    background-color: var(--dark-overlay);
 }
 
 md-nav-bar.md-default-theme.md-primary>.md-nav-bar .md-button._md-nav-button,
@@ -673,7 +715,7 @@ md-nav-bar.md-primary>.md-nav-bar .md-button._md-nav-button.md-focused {
 
 md-toolbar>md-nav-bar.md-default-theme>.md-nav-bar,
 md-toolbar>md-nav-bar>.md-nav-bar {
-    background-color: var(--dark-accent-light);
+    background-color: var(--dark-overlay);
 }
 
 md-toolbar>md-nav-bar.md-default-theme>.md-nav-bar .md-button._md-nav-button,
@@ -824,7 +866,7 @@ md-input-container.md-input-focused:not(.md-input-has-value) md-select.md-defaul
 md-input-container.md-input-focused:not(.md-input-has-value) md-select .md-select-value,
 md-input-container.md-input-focused:not(.md-input-has-value) md-select.md-default-theme .md-select-value.md-select-placeholder,
 md-input-container.md-input-focused:not(.md-input-has-value) md-select .md-select-value.md-select-placeholder {
-    color: var(--dark-accent-light);
+    color: var(--dark-overlay);
 }
 
 md-input-container.md-input-invalid md-select.md-default-theme.md-no-underline .md-select-value,
@@ -854,7 +896,7 @@ md-select.ng-invalid.ng-touched.md-no-underline .md-select-value {
 
 md-select.md-default-theme:not([disabled]):focus .md-select-value,
 md-select:not([disabled]):focus .md-select-value {
-    border-bottom-color: var(--dark-accent-light);
+    border-bottom-color: var(--dark-overlay);
     color: var(--dark-secondary);
 }
 
@@ -906,12 +948,12 @@ md-select-menu.md-default-theme md-content md-option[selected].md-focused,
 md-select-menu md-content md-option[selected].md-focused,
 md-select-menu.md-default-theme md-content md-option[selected]:focus,
 md-select-menu md-content md-option[selected]:focus {
-    color: var(--dark-accent-light);
+    color: var(--dark-overlay-light);
 }
 
 .md-checkbox-enabled.md-default-theme .md-ripple,
 .md-checkbox-enabled .md-ripple {
-    color: var(--dark-accent-light);
+    color: var(--dark-overlay-light);
 }
 
 .md-checkbox-enabled.md-default-theme .md-ink-ripple,
@@ -8369,7 +8411,7 @@ md-toolbar.md-hue-2:not(.md-menu-toolbar) md-input-container[md-no-float]:not(.m
 
 md-toolbar.md-default-theme.md-hue-2:not(.md-menu-toolbar).md-warn,
 md-toolbar.md-hue-2:not(.md-menu-toolbar).md-warn {
-    background-color: rgb(12, 12, 14);
+    background-color: var(--dark-accent-light);
     color: var(--edulution-blue);
 }
 
@@ -9434,14 +9476,14 @@ md-select-menu md-content {
 
 md-select-menu.md-default-theme md-content md-option:not([disabled]):hover,
 md-select-menu md-content md-option:not([disabled]):hover {
-    background-color: var(--dark-accent);
+    background-color: var(--dark-overlay-light);
 }
 
 md-select-menu.md-default-theme md-content md-option:not([disabled]).md-focused,
 md-select-menu md-content md-option:not([disabled]).md-focused,
 md-select-menu.md-default-theme md-content md-option:not([disabled]):focus,
 md-select-menu md-content md-option:not([disabled]):focus {
-    background-color: var(--dark-accent-light);
+    background-color: var(--dark-overlay-light);
 }
 
 .md-checkbox-enabled.md-default-theme[selected] .md-ripple,
@@ -11404,8 +11446,6 @@ md-list-item {
     color: rgba(197, 197, 197, 0.9);
 }
 
-/*.md-subheader, .md-toolbar-tools {background-color:rgb(21, 31, 21);}*/
-
 .layout-column,
 .view-detail {
     background-color: rgb(12, 12, 14) !important;
@@ -11419,7 +11459,6 @@ md-toolbar.md-hue-1:not(.md-menu-toolbar).md-accent md-input-container[md-no-flo
 
 md-toolbar.md-default-theme.md-hue-2:not(.md-menu-toolbar),
 md-toolbar.md-hue-2:not(.md-menu-toolbar) {
-    /*background-color: rgb(125, 140, 60);color: rgb(255, 255, 255);*/
     background-color: rgb(12, 12, 14);
     color: var(--edulution-blue);
 }
@@ -11427,7 +11466,7 @@ md-toolbar.md-hue-2:not(.md-menu-toolbar) {
 md-select-menu.md-default-theme md-content,
 md-select-menu md-content,
 md-menu-content {
-    background-color: rgb(59, 59, 63);
+    background-color: var(--dark-overlay);
 }
 
 md-select-menu.md-default-theme md-content md-option,
@@ -11508,7 +11547,7 @@ md-autocomplete.md-hue-1 input {
 .md-autocomplete-suggestions-container.md-default-theme .md-autocomplete-suggestion,
 .md-autocomplete-suggestions-container .md-autocomplete-suggestion {
     color: rgb(197 197 197);
-    background-color: rgb(59, 59, 63)
+    background-color: var(--dark-overlay);
 }
 
 .md-autocomplete-standard-list-container.md-default-theme .md-autocomplete-suggestion:hover,
@@ -11532,7 +11571,7 @@ md-autocomplete md-chips .md-chips .md-chip-input-container {
 
 /* End Mail editor. Headers */
 md-list-item.md-clickable._md-button-wrap._md.layout-align-space-between-center.layout-row {
-    background-color: rgb(59, 59, 63);
+    background-color: var(--dark-overlay);
 }
 
 /* Mail tag color */
@@ -11715,7 +11754,7 @@ md-dialog h2.md-title {
 }
 
 md-dialog.md-transition-in {
-    background-color: var(--dark-accent-light) !important;
+    background-color: var(--dark-overlay) !important;
 }
 
 md-dialog button.md-primary.md-button.md-default-theme.md-ink-ripple {
@@ -11735,9 +11774,8 @@ md-sidenav .md-toolbar-tools.sg-toolbar-tools--dense.layout-align-center-center 
 
 /* Logo screen */
 md-content .md-default-theme.md-accent.md-bg {
-    background-color: rgb(6, 6, 7) !important
-        /* rgb(59, 59, 63) !important; */
-}
+    background-color: rgb(6, 6, 7) !important;
+};
 
 .sg-login-content {
     .layout-column {
