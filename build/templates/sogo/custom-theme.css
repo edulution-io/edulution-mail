@@ -11446,8 +11446,6 @@ md-list-item {
     color: rgba(197, 197, 197, 0.9);
 }
 
-/*.md-subheader, .md-toolbar-tools {background-color:rgb(21, 31, 21);}*/
-
 .layout-column,
 .view-detail {
     background-color: rgb(12, 12, 14) !important;
@@ -11461,7 +11459,6 @@ md-toolbar.md-hue-1:not(.md-menu-toolbar).md-accent md-input-container[md-no-flo
 
 md-toolbar.md-default-theme.md-hue-2:not(.md-menu-toolbar),
 md-toolbar.md-hue-2:not(.md-menu-toolbar) {
-    /*background-color: rgb(125, 140, 60);color: rgb(255, 255, 255);*/
     background-color: rgb(12, 12, 14);
     color: var(--edulution-blue);
 }
