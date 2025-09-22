@@ -84,6 +84,11 @@ md-dialog[ui-view=maileditor].sg-mail-editor[flex="60"] {
 }
 
 md-dialog[ui-view=maileditor].sg-mail-editor {
+    color: var(--dark-foreground);
+    p {
+        color: var(--dark-foreground);
+    }
+
     form.ng-pristine {
         height: 100%;
 
@@ -92,11 +97,19 @@ md-dialog[ui-view=maileditor].sg-mail-editor {
 
             md-input-container.sg-mail-editor-content {
                 height: calc(100% - 190px);
+                color: var(--dark-foreground);
+                
+                p {
+                    color: var(--dark-foreground);
+                }
 
                 sg-ckeditor {
                     height: 100%;
                     background-color: var(--dark-background);
-                    color: var(--dark-accent);
+                    color: var(--dark-foreground);                    
+                    p {
+                        color: var(--dark-foreground);
+                    }
 
                     div.ck-editor {
                         min-height: 300px;
@@ -111,10 +124,6 @@ md-dialog[ui-view=maileditor].sg-mail-editor {
                             div.ck-content.ck-editor__editable.ck-editor__editable_inline {
                                 min-height: 300px;
                                 height: 100%;
-
-                                p {
-                                    color: var(--dark-foreground);
-                                }
                             }
                         }
                     }
