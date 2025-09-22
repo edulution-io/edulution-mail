@@ -44,7 +44,19 @@ class ListStorage:
         return len(self._addQueue) == 0 and len(self._updateQueue) == 0 and len(self._disableQueue) == 0 and len(self._killQueue) == 0
 
     def getQueueCountsString(self, descriptor: str) -> str:
-        return f"Going to add {len(self._addQueue)} {descriptor}, update {len(self._updateQueue)} {descriptor} and disable {len(self._disableQueue)} {descriptor}"
+        parts = []
+        if len(self._addQueue) > 0:
+            parts.append(f"add {len(self._addQueue)}")
+        if len(self._updateQueue) > 0:
+            parts.append(f"update {len(self._updateQueue)}")
+        if len(self._disableQueue) > 0:
+            parts.append(f"disable/delete {len(self._disableQueue)}")
+        if len(self._killQueue) > 0:
+            parts.append(f"permanently delete {len(self._killQueue)}")
+        
+        if parts:
+            return f"Going to {', '.join(parts)} {descriptor}"
+        return f"No changes for {descriptor}"
     
     def addQueue(self) -> list:
         return self._getQueueAsList(self._addQueue)
@@ -57,6 +69,17 @@ class ListStorage:
             "items": [key]
         })
         return queue
+    
+    def disableQueue(self) -> list:
+        return self._getQueueAsList(self._disableQueue)
+    
+    def killQueue(self) -> list:
+        return self._getQueueAsList(self._killQueue)
+    
+    def moveToKillQueue(self, elementId: str):
+        if elementId in self._disableQueue:
+            self._killQueue[elementId] = self._disableQueue[elementId]
+            del self._disableQueue[elementId]
 
     def _checkElementChanges(self, element: dict, elementId: str):
         currentElement = self._managed[elementId]

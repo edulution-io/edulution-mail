@@ -18,6 +18,9 @@ class ConfigurationStorage:
         self.ENABLE_GAL = os.environ.get("ENABLE_GAL", 1)
 
         self.SYNC_INTERVAL = os.environ.get("SYNC_INTERVAL", 300)
+        
+        self.SOFT_DELETE_ENABLED = int(os.environ.get("SOFT_DELETE_ENABLED", 1))
+        self.SOFT_DELETE_GRACE_PERIOD = int(os.environ.get("SOFT_DELETE_GRACE_PERIOD", 2592000))  # 30 days default
 
         self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False) # entrypoint.sh set this as environment variable
         self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "edu-mailcow-sync")
@@ -40,6 +43,8 @@ class ConfigurationStorage:
         - DOMAIN_QUOTA
         - ENABLE_GAL
         - SYNC_INTERVAL
+        - SOFT_DELETE_ENABLED
+        - SOFT_DELETE_GRACE_PERIOD
         """
 
         OVERRIDE_FILE = os.environ.get("MAILCOW_PATH", "/srv/docker/edulution-mail") + "/mail.override.config"
@@ -75,6 +80,14 @@ class ConfigurationStorage:
             if "SYNC_INTERVAL" in override_config:
                 logging.info(f"* OVERRIDE SYNC_INTERVAL: {self.SYNC_INTERVAL} with {override_config['SYNC_INTERVAL']}")
                 self.SYNC_INTERVAL = int(override_config["SYNC_INTERVAL"])
+            
+            if "SOFT_DELETE_ENABLED" in override_config:
+                logging.info(f"* OVERRIDE SOFT_DELETE_ENABLED: {self.SOFT_DELETE_ENABLED} with {override_config['SOFT_DELETE_ENABLED']}")
+                self.SOFT_DELETE_ENABLED = int(override_config["SOFT_DELETE_ENABLED"])
+            
+            if "SOFT_DELETE_GRACE_PERIOD" in override_config:
+                logging.info(f"* OVERRIDE SOFT_DELETE_GRACE_PERIOD: {self.SOFT_DELETE_GRACE_PERIOD} with {override_config['SOFT_DELETE_GRACE_PERIOD']}")
+                self.SOFT_DELETE_GRACE_PERIOD = int(override_config["SOFT_DELETE_GRACE_PERIOD"])
 
             logging.info("==========================================================")
             
