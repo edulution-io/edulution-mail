@@ -1,17 +1,5 @@
 #!/bin/bash
-
-function on_stop() {
-    echo "Container has been stopped! Stopping mailcow..."
-    docker compose --project-directory ${MAILCOW_PATH}/mailcow/ down
-    # DISABLED: Deleting mailcow directory on shutdown causes data loss
-    # This was the reason why 'docker compose down' deleted folder contents
-    # rm -rf ${MAILCOW_PATH}/mailcow
-    echo "Finished!"
-    exit 0
-}
-
-trap on_stop SIGTERM
-trap on_stop SIGINT
+set -e
 
 function set_mailcow_token() {
   # Create API User for Mailcow
