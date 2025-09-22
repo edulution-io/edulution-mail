@@ -207,10 +207,14 @@ class EdulutionMailcowSync:
                         description = self.deactivationTracker.formatDescriptionWithDeletionDate(
                             mailbox.get('name', ''), "mailboxes", username
                         )
+                        # Extract local_part and domain for the update
+                        local_part, domain = username.split('@')
                         self.mailcow.updateMailbox({
                             "attr": {
                                 "active": 0,
-                                "name": description
+                                "name": description,
+                                "local_part": local_part,
+                                "domain": domain
                             },
                             "items": [username]
                         })
@@ -230,7 +234,8 @@ class EdulutionMailcowSync:
                         self.mailcow.updateDomain({
                             "attr": {
                                 "active": 0,
-                                "description": description
+                                "description": description,
+                                "domain": domain_name
                             },
                             "items": [domain_name]
                         })
