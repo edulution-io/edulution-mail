@@ -3,7 +3,7 @@ name: Build docker image
 on:
   
   push:
-    branches: ["main", "devDB"]
+    branches: ["main", "dev"]
 
   workflow_dispatch:
 
@@ -34,7 +34,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker
+      - name: Determine Docker tags
+        id: docker-tags
+        run: |
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            echo "tags=ghcr.io/${{ github.repository }}:main,ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" == "dev" ]]; then
+            echo "tags=ghcr.io/${{ github.repository }}:dev" >> $GITHUB_OUTPUT
+          else
+            echo "tags=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata (labels) for Docker
         id: meta
         uses: docker/metadata-action@v4
         with:
@@ -46,7 +57,5 @@ jobs:
           context: ./build/ 
           file: ./build/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ${{ steps.meta.outputs.tags }}
-            ghcr.io/${{ github.repository }}:latest
+          tags: ${{ steps.docker-tags.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
