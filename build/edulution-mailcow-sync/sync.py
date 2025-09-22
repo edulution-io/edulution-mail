@@ -6,7 +6,7 @@ import time
 import logging
 import os
 
-from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage
+from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage, DeactivationTracker
 
 logging.basicConfig(format='%(levelname)s: %(asctime)s %(message)s', level=logging.INFO)
 
@@ -17,6 +17,7 @@ class EdulutionMailcowSync:
 
         self.keycloak = Keycloak(server_url=self._config.KEYCLOAK_SERVER_URL, client_id=self._config.KEYCLOAK_CLIENT_ID, client_secret_key=self._config.KEYCLOAK_SECRET_KEY)
         self.mailcow = Mailcow(apiToken=self._config.MAILCOW_API_TOKEN)
+        self.deactivationTracker = DeactivationTracker(storage_path=self._config.MAILCOW_PATH + "/data")
 
         self.keycloak.initKeycloakAdmin()
 
@@ -121,16 +122,8 @@ class EdulutionMailcowSync:
 
         logging.info("* 3. Syncing deltas to mailcow")
 
-        # 1. Delete items
-
-        # self.mailcow.killElementsOfType(
-        #     "filter", mailcowFilters.killQueue())
-        # self.mailcow.killElementsOfType(
-        #     "alias", mailcowAliases.killQueue())
-        # self.mailcow.killElementsOfType(
-        #     "mailbox", mailcowMailboxes.killQueue())
-        # self.mailcow.killElementsOfType(
-        #     "domain", mailcowDomains.killQueue())
+        # 1. Process deactivations and deletions
+        self._processDeactivationsAndDeletions(domainList, mailboxList, aliasList, filterList)
 
         # 2. Domain(s) add and update
 
@@ -184,6 +177,101 @@ class EdulutionMailcowSync:
             "aliases": 10000,
             "gal": self._config.ENABLE_GAL
         }, domainName)
+    
+    def _processDeactivationsAndDeletions(self, domainList: DomainListStorage, mailboxList: MailboxListStorage, aliasList: AliasListStorage, filterList: FilterListStorage):
+        grace_period = self._config.SOFT_DELETE_GRACE_PERIOD
+        soft_delete_enabled = self._config.SOFT_DELETE_ENABLED
+        
+        # Process immediate deletions for aliases and filters
+        for alias in aliasList.disableQueue():
+            alias_id = alias.get('id') or alias.get('address')
+            if alias_id:
+                self.mailcow.deleteAlias(alias_id)
+                logging.info(f"  * Deleted alias {alias_id}")
+        
+        for filter in filterList.disableQueue():
+            filter_id = filter.get('id')
+            if filter_id:
+                self.mailcow.deleteFilter(filter_id)
+                logging.info(f"  * Deleted filter {filter_id}")
+        
+        if soft_delete_enabled:
+            # Process deactivations for mailboxes
+            for mailbox in mailboxList.disableQueue():
+                username = mailbox.get('username')
+                if username:
+                    # Check if already marked for deactivation
+                    if not self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
+                        # First deactivation: disable and mark with deletion date
+                        self.deactivationTracker.markForDeactivation("mailboxes", username, grace_period)
+                        description = self.deactivationTracker.formatDescriptionWithDeletionDate(
+                            mailbox.get('name', ''), "mailboxes", username
+                        )
+                        self.mailcow.updateMailbox({
+                            "attr": {
+                                "active": 0,
+                                "name": description
+                            },
+                            "items": [username]
+                        })
+                        logging.info(f"  * Deactivated mailbox {username}")
+            
+            # Process deactivations for domains
+            for domain in domainList.disableQueue():
+                domain_name = domain.get('domain_name')
+                if domain_name:
+                    # Check if already marked for deactivation
+                    if not self.deactivationTracker.isMarkedForDeactivation("domains", domain_name):
+                        # First deactivation: disable and mark with deletion date
+                        self.deactivationTracker.markForDeactivation("domains", domain_name, grace_period)
+                        description = self.deactivationTracker.formatDescriptionWithDeletionDate(
+                            domain.get('description', ''), "domains", domain_name
+                        )
+                        self.mailcow.updateDomain({
+                            "attr": {
+                                "active": 0,
+                                "description": description
+                            },
+                            "items": [domain_name]
+                        })
+                        logging.info(f"  * Deactivated domain {domain_name}")
+            
+            # Check for items to permanently delete
+            for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
+                if self.mailcow.deleteMailbox(mailbox_id):
+                    self.deactivationTracker.removeDeleted("mailboxes", mailbox_id)
+                    logging.info(f"  * Permanently deleted mailbox {mailbox_id}")
+            
+            for domain_id in self.deactivationTracker.getItemsToDelete("domains"):
+                if self.mailcow.deleteDomain(domain_id):
+                    self.deactivationTracker.removeDeleted("domains", domain_id)
+                    logging.info(f"  * Permanently deleted domain {domain_id}")
+            
+            # Reactivate items that reappeared in Keycloak
+            for mailbox in mailboxList.addQueue() + mailboxList.updateQueue():
+                username = mailbox.get('local_part') + '@' + mailbox.get('domain') if 'local_part' in mailbox else mailbox.get('attr', {}).get('local_part') + '@' + mailbox.get('attr', {}).get('domain')
+                if username and self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
+                    self.deactivationTracker.reactivate("mailboxes", username)
+                    logging.info(f"  * Reactivated mailbox {username} (found in Keycloak again)")
+            
+            for domain in domainList.addQueue() + domainList.updateQueue():
+                domain_name = domain.get('domain') if 'domain' in domain else domain.get('attr', {}).get('domain')
+                if domain_name and self.deactivationTracker.isMarkedForDeactivation("domains", domain_name):
+                    self.deactivationTracker.reactivate("domains", domain_name)
+                    logging.info(f"  * Reactivated domain {domain_name} (found in Keycloak again)")
+        else:
+            # Soft delete disabled - delete immediately
+            for mailbox in mailboxList.disableQueue():
+                username = mailbox.get('username')
+                if username:
+                    self.mailcow.deleteMailbox(username)
+                    logging.info(f"  * Deleted mailbox {username}")
+            
+            for domain in domainList.disableQueue():
+                domain_name = domain.get('domain_name')
+                if domain_name:
+                    self.mailcow.deleteDomain(domain_name)
+                    logging.info(f"  * Deleted domain {domain_name}")
     
     def _addMailbox(self, user: dict, mailboxList: MailboxListStorage) -> bool:
         mail = user["email"]
