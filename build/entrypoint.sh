@@ -59,16 +59,22 @@ set_mailcow_token() {
         source ${MAILCOW_PATH}/mailcow/.env
         
         # Wait for MySQL and api table
-        log_info "Waiting for MySQL and api table"
-        local attempt=0
-        while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "DESCRIBE api" >/dev/null 2>&1; do
-            attempt=$((attempt + 1))
-            if [ $attempt -gt 60 ]; then
-                log_error "MySQL api table not available after 60 attempts"
-                break
-            fi
-            sleep 5
-        done
+        # log_info "Waiting for MySQL and api table"
+        # local attempt=0
+        # while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "DESCRIBE api" >/dev/null 2>&1; do
+        #     attempt=$((attempt + 1))
+        #     if [ $attempt -gt 60 ]; then
+        #         log_error "MySQL api table not available after 60 attempts"
+        #         break
+        #     fi
+        #     sleep 5
+        # done
+
+        # Wait for MySQL
+        if ! wait_for_mysql; then
+            log_error "Cannot read/create API token - MySQL unavailable"
+            return 1
+        fi
         
         # Insert API token
         if mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "INSERT INTO api (api_key, allow_from, skip_ip_check, created, access, active) VALUES ('${MAILCOW_API_TOKEN}', '172.16.0.0/12', '0', NOW(), 'rw', '1')" 2>/dev/null; then
@@ -491,10 +497,10 @@ EOF
     apply_templates
     configure_sogo_gal
     pull_and_start_mailcow
-    apply_docker_network
-    wait_for_mailcow
     set_mailcow_token
     create_edulution_view
+    apply_docker_network
+    wait_for_mailcow
     start_services
 }
 
