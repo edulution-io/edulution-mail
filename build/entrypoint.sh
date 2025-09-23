@@ -37,6 +37,178 @@ function set_mailcow_token() {
   export MAILCOW_API_TOKEN
 }
 
+function create_edulution_view() {
+  echo "==== Creating edulution_gal view... ===="
+  source ${MAILCOW_PATH}/mailcow/.env
+  
+  # Wait for MySQL to be ready
+  echo "Waiting for MySQL to be ready..."
+  while ! mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME -e "SELECT 1" >/dev/null 2>&1; do
+    echo "MySQL not ready yet..."
+    sleep 5
+  done
+  
+  echo "Creating edulution_gal view..."
+  
+  mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME <<'EOSQL'
+CREATE OR REPLACE VIEW edulution_gal AS
+
+-- Mailboxen mit allen eigenen Aliassen
+SELECT
+    m.username                        AS c_uid,
+    m.username                        AS c_name,
+    m.name                            AS c_cn,
+    NULL                              AS givenname,
+    NULL                              AS sn,
+    CONCAT_WS(';',
+        m.username,
+        (
+            SELECT GROUP_CONCAT(DISTINCT a.address ORDER BY a.address SEPARATOR ';')
+            FROM alias a
+            WHERE a.active = 1
+              AND a.goto NOT LIKE '%,%'
+              AND FIND_IN_SET(m.username, REPLACE(a.goto, ' ', '')) > 0
+              AND a.address <> m.username
+        )
+    )                                 AS mail,
+    NULL                              AS telephonenumber,
+    NULL                              AS mobile,
+    NULL                              AS homephone,
+    NULL                              AS street,
+    NULL                              AS l,
+    NULL                              AS postalcode,
+    NULL                              AS o,
+    NULL                              AS title,
+    NULL                              AS url,
+    NULL                              AS note,
+    GREATEST(
+        IFNULL(m.modified, m.created),
+        IFNULL((
+            SELECT MAX(a.modified)
+            FROM alias a
+            WHERE a.active = 1
+              AND a.goto NOT LIKE '%,%'
+              AND FIND_IN_SET(m.username, REPLACE(a.goto, ' ', '')) > 0
+              AND a.address <> m.username
+        ), m.created)
+    )                                 AS updated_at
+FROM mailbox m
+WHERE m.active = 1
+
+UNION ALL
+
+-- Verteilerlisten (Aliase mit mehreren Empfängern)
+SELECT
+    a.address                         AS c_uid,
+    a.address                         AS c_name,
+    CONCAT(
+        a.address,
+        ' (Verteiler, ',
+        LENGTH(a.goto) - LENGTH(REPLACE(a.goto, ',', '')) + 1,
+        ' Empfaenger)'
+    )                                 AS c_cn,
+    NULL                              AS givenname,
+    NULL                              AS sn,
+    a.address                         AS mail,
+    NULL                              AS telephonenumber,
+    NULL                              AS mobile,
+    NULL                              AS homephone,
+    NULL                              AS street,
+    NULL                              AS l,
+    NULL                              AS postalcode,
+    NULL                              AS o,
+    NULL                              AS title,
+    NULL                              AS url,
+    NULL                              AS note,
+    a.modified                        AS updated_at
+FROM alias a
+WHERE a.active = 1
+  AND a.goto LIKE '%,%';
+EOSQL
+  
+  if [ $? -eq 0 ]; then
+    echo "edulution_gal view created successfully"
+  else
+    echo "WARNING: Failed to create edulution_gal view, it may already exist"
+  fi
+}
+
+function configure_sogo_gal() {
+  echo "==== Configuring SOGo Global Address List... ===="
+  source ${MAILCOW_PATH}/mailcow/.env
+  
+  SOGO_CONF="${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo.conf"
+  
+  # Wait for sogo.conf to exist
+  while [ ! -f "$SOGO_CONF" ]; do
+    echo "Waiting for sogo.conf to be created..."
+    sleep 5
+  done
+  
+  echo "Checking SOGo configuration for GAL settings..."
+  
+  # Check if edulution GAL is already configured
+  if grep -q "id = \"edulution\"" "$SOGO_CONF"; then
+    echo "edulution GAL is already configured in SOGo"
+  else
+    echo "Adding edulution GAL configuration to SOGo..."
+    
+    # Create the GAL configuration
+    GAL_CONFIG="  SOGoUserSources = (
+    {
+      type = sql;
+      id = \"edulution\";
+      isAddressBook = YES;
+      canAuthenticate = NO;
+      displayName = \"GAL edulution\";
+
+      viewURL = \"mysql://${DBUSER}:${DBPASS}@mysql/${DBNAME}/edulution_gal\";
+
+      UIDFieldName   = \"c_uid\";
+      CNFieldName    = \"c_cn\";
+      IDFieldName    = \"c_uid\";
+      MailFieldNames = (\"mail\");
+
+      listRequiresDot = NO; // necessary for show contacts in list!
+    }
+  );"
+    
+    # Check if SOGoUserSources exists
+    if grep -q "SOGoUserSources" "$SOGO_CONF"; then
+      echo "SOGoUserSources already exists, needs manual configuration"
+      echo "Please add the edulution GAL configuration manually to the existing SOGoUserSources"
+    else
+      # Add before the closing brace of the main configuration
+      # First, backup the original file
+      cp "$SOGO_CONF" "${SOGO_CONF}.bak.$(date +%Y%m%d%H%M%S)"
+      
+      # Insert the configuration before the last closing brace
+      awk -v config="$GAL_CONFIG" '
+        /^}$/ && !done {
+          print config
+          print ""
+          done=1
+        }
+        {print}
+      ' "$SOGO_CONF" > "${SOGO_CONF}.tmp"
+      
+      if [ $? -eq 0 ]; then
+        mv "${SOGO_CONF}.tmp" "$SOGO_CONF"
+        echo "edulution GAL configuration added successfully"
+        
+        # Restart SOGo container to apply changes
+        echo "Restarting SOGo container to apply configuration..."
+        docker restart mailcowdockerized-sogo-mailcow-1 2>/dev/null || true
+      else
+        echo "ERROR: Failed to add GAL configuration"
+        rm -f "${SOGO_CONF}.tmp"
+      fi
+    fi
+  fi
+  
+  echo "SOGo GAL configuration check completed"
+}
+
 function start() {
   source /app/venv/bin/activate
   python /app/api.py 2>&1 >> /app/log.log &
@@ -222,5 +394,9 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
 fi
 
 set_mailcow_token
+
+create_edulution_view
+
+configure_sogo_gal
 
 start
