@@ -259,6 +259,14 @@ configure_sogo_gal() {
     if [ $? -eq 0 ]; then
         mv "${SOGO_CONF}.tmp" "$SOGO_CONF"
         log_success "GAL configuration added"
+
+        # Restart SOGo if it's already running
+        if docker ps --format "{{.Names}}" | grep -q "sogo-mailcow"; then
+            log_info "Restarting SOGo container to apply configuration"
+            docker restart mailcowdockerized-sogo-mailcow-1 2>/dev/null || true
+        else
+            log_info "SOGo container not running yet - will be started later"
+        fi
     else
         log_error "Failed to add GAL configuration"
         rm -f "${SOGO_CONF}.tmp"
@@ -484,10 +492,10 @@ EOF
         log_warning "Mailcow is already running - only starting API and sync services"
         
         ensure_sogo_files
-        set_mailcow_token
-        create_edulution_view
         configure_sogo_gal
         apply_docker_network
+        set_mailcow_token
+        create_edulution_view
         start_services
         exit 0
     fi
@@ -497,9 +505,9 @@ EOF
     apply_templates
     configure_sogo_gal
     pull_and_start_mailcow
+    apply_docker_network
     set_mailcow_token
     create_edulution_view
-    apply_docker_network
     wait_for_mailcow
     start_services
 }
