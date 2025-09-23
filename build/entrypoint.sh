@@ -342,6 +342,8 @@ if docker compose --project-directory "${MAILCOW_PATH}/mailcow/" ps | grep -q 'm
   ensure_sogo_files
   
   set_mailcow_token
+  create_edulution_view
+  configure_sogo_gal
   apply_docker_network
   start
   exit
@@ -350,6 +352,8 @@ fi
 init
 
 apply_templates
+
+configure_sogo_gal
 
 pull_and_start_mailcow
 
@@ -368,6 +372,10 @@ while ! curl -s -k --head --request GET --max-time 2 "https://nginx-mailcow/" 2>
 done
 
 echo "Nginx is ready, checking if mailcow is fully initialized..."
+
+set_mailcow_token
+
+create_edulution_view
 
 # Wait for mailcow API to be ready (not just nginx)
 MAX_RETRIES=60
@@ -392,11 +400,5 @@ done
 if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
   echo "WARNING: Mailcow did not become ready within timeout period, trying to set token anyway..."
 fi
-
-set_mailcow_token
-
-create_edulution_view
-
-configure_sogo_gal
 
 start
