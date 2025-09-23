@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 function set_mailcow_token() {
   # Create API User for Mailcow
