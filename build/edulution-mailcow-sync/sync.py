@@ -100,20 +100,8 @@ class EdulutionMailcowSync:
                 logging.warning(f"    -> Mailinglist {mail} has no members, skipping!")
                 continue
 
-            # self._addMailbox({
-            #     "email": mail,
-            #     "firstName": group["name"],
-            #     "lastName": "(list)",
-            #     "attributes": {
-            #         "sophomorixMailQuotaCalculated": [ 1 ],
-            #         "sophomorixStatus": "G"
-            #     }
-            # }, mailboxList)
-
             self._addAlias(mail, membermails, aliasList)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
-
-            # self._addListFilter(mail, membermails, filterList)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
             logging.info("  * Everything is up-to-date!")
