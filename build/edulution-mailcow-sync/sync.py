@@ -36,6 +36,7 @@ class EdulutionMailcowSync:
 
     def _sync(self) -> bool:
         logging.info("=== Starting Edulution-Mailcow-Sync ===")
+        logging.info("")
 
         if os.path.exists(self._config.MAILCOW_PATH + "/DISABLE_SYNC"):
             logging.info("")
@@ -97,10 +98,10 @@ class EdulutionMailcowSync:
                 continue
 
             if len(membermails) == 0:
-                logging.warning(f"    -> Mailinglist {mail} has no members, skipping!")
+                logging.debug(f"    -> Mailinglist {mail} has no members, skipping!")
                 continue
 
-            self._addAlias(mail, membermails, aliasList)
+            self._addAlias(mail, membermails, aliasList, sogo_visible = 0)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
@@ -305,13 +306,13 @@ class EdulutionMailcowSync:
 
         return True
 
-    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage) -> bool:
+    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1) -> bool:
         goto_targets = ",".join(goto) if isinstance(goto, list) else goto
         return aliasList.addElement({
             "address": alias,
             "goto": goto_targets,
             "active": 1,
-            "sogo_visible": 1
+            "sogo_visible": sogo_visible
         }, alias)
 
     # def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):
