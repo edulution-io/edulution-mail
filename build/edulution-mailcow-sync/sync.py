@@ -191,7 +191,8 @@ class EdulutionMailcowSync:
             self._addAlias(mail, membermails, aliasList, sogo_visible = 0)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
 
-        # Update missing users tracking
+        # Update missing users tracking BEFORE processing queues
+        # This must happen before we check the queues
         self._update_missing_users_tracking(mailboxList, found_users)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
@@ -243,30 +244,81 @@ class EdulutionMailcowSync:
         return True
     
     def _update_missing_users_tracking(self, mailboxList: MailboxListStorage, found_users: set):
-        """Update the tracking of missing users"""
-        # Get all current mailboxes from disable queue (these are the existing mailboxes)
-        current_mailboxes = set()
-        # The disable queue contains all existing managed mailboxes that weren't found in Keycloak
+        """Update the tracking of missing users and remove them from disable queue if needed"""
+        # Process all mailboxes that are in the disable queue
+        mailboxes_to_keep_active = []
+        
         for mailbox in mailboxList.disableQueue():
+            # The mailbox data from Mailcow API uses 'username' as the primary key
+            # It contains the full email address
+            username = None
+            
+            # Check different possible field names
             if 'username' in mailbox:
-                current_mailboxes.add(mailbox['username'])
-        
-        # Check which mailboxes are missing from Keycloak
-        for mailbox_email in current_mailboxes:
-            if mailbox_email not in found_users:
-                # User not found in Keycloak, increment counter
-                if mailbox_email not in self.missing_users:
-                    self.missing_users[mailbox_email] = 0
-                self.missing_users[mailbox_email] += 1
-                logging.info(f"  * User {mailbox_email} not found in Keycloak (missing count: {self.missing_users[mailbox_email]})")
-            else:
+                username = mailbox['username']
+            elif 'local_part' in mailbox and 'domain' in mailbox:
+                username = mailbox['local_part'] + '@' + mailbox['domain']
+                
+            if not username:
+                logging.warning(f"Could not determine username from mailbox: {mailbox}")
+                continue
+                
+            # Check if this user was found in Keycloak
+            if username in found_users:
                 # User found, reset counter if exists
-                if mailbox_email in self.missing_users:
-                    del self.missing_users[mailbox_email]
-                    logging.info(f"  * User {mailbox_email} found again in Keycloak, resetting counter")
+                if username in self.missing_users:
+                    del self.missing_users[username]
+                    logging.info(f"  * User {username} found again in Keycloak, resetting counter")
+            else:
+                # User not found in Keycloak, increment counter
+                if username not in self.missing_users:
+                    self.missing_users[username] = 0
+                self.missing_users[username] += 1
+                logging.info(f"  * User {username} not found in Keycloak (missing count: {self.missing_users[username]})")
+                
+                # Check if we should keep this mailbox active for now
+                if self.missing_users[username] < self.MAX_MISSING_COUNT:
+                    mailboxes_to_keep_active.append((username, mailbox))
+                    logging.info(f"  * Keeping {username} active (only missing {self.missing_users[username]} times, threshold is {self.MAX_MISSING_COUNT})")
         
-        # Clean up entries for users that no longer exist in mailcow
-        self.missing_users = {k: v for k, v in self.missing_users.items() if k in current_mailboxes}
+        # Remove mailboxes from disable queue that shouldn't be disabled yet
+        # We need to re-add them to prevent deactivation
+        for username, mailbox_data in mailboxes_to_keep_active:
+            # Re-add the mailbox to prevent it from being disabled
+            # This effectively removes it from the disable queue
+            domain = username.split('@')[1]
+            local_part = username.split('@')[0]
+            mailboxList.addElement({
+                "domain": domain,
+                "local_part": local_part,
+                "active": mailbox_data.get('active', 1),
+                "quota": mailbox_data.get('quota', 1024),
+                "name": mailbox_data.get('name', '')
+            }, username)
+        
+        # Clean up missing_users entries for users that no longer exist
+        existing_users = set()
+        for mailbox in mailboxList.disableQueue():
+            username = None
+            if 'username' in mailbox:
+                username = mailbox['username']
+            elif 'local_part' in mailbox and 'domain' in mailbox:
+                username = mailbox['local_part'] + '@' + mailbox['domain']
+            
+            if username:
+                existing_users.add(username)
+        
+        # Also add users from add and update queues
+        for mailbox in mailboxList.addQueue() + mailboxList.updateQueue():
+            if 'local_part' in mailbox and 'domain' in mailbox:
+                username = mailbox['local_part'] + '@' + mailbox['domain']
+                existing_users.add(username)
+            elif 'attr' in mailbox and 'local_part' in mailbox['attr'] and 'domain' in mailbox['attr']:
+                username = mailbox['attr']['local_part'] + '@' + mailbox['attr']['domain'] 
+                existing_users.add(username)
+        
+        # Remove tracking for non-existent users
+        self.missing_users = {k: v for k, v in self.missing_users.items() if k in existing_users}
         
         # Save the updated tracking data
         self._save_missing_users()
@@ -321,7 +373,13 @@ class EdulutionMailcowSync:
         if soft_delete_enabled:
             # Process deactivations for mailboxes - with missing count check
             for mailbox in mailboxList.disableQueue():
-                username = mailbox.get('username')
+                # Get username from mailbox data
+                username = None
+                if 'username' in mailbox:
+                    username = mailbox['username']
+                elif 'local_part' in mailbox and 'domain' in mailbox:
+                    username = mailbox['local_part'] + '@' + mailbox['domain']
+                
                 if username:
                     # Check if user has been missing long enough
                     if not self._should_deactivate_mailbox(username):
@@ -403,7 +461,13 @@ class EdulutionMailcowSync:
         else:
             # Soft delete disabled - but still check missing count for mailboxes
             for mailbox in mailboxList.disableQueue():
-                username = mailbox.get('username')
+                # Get username from mailbox data
+                username = None
+                if 'username' in mailbox:
+                    username = mailbox['username']
+                elif 'local_part' in mailbox and 'domain' in mailbox:
+                    username = mailbox['local_part'] + '@' + mailbox['domain']
+                
                 if username:
                     # Check if user has been missing long enough
                     if not self._should_deactivate_mailbox(username):
