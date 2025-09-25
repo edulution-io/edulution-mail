@@ -5,6 +5,7 @@ import string
 import time
 import logging
 import os
+import json
 
 from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage, DeactivationTracker
 
@@ -18,20 +19,53 @@ class EdulutionMailcowSync:
         self.keycloak = Keycloak(server_url=self._config.KEYCLOAK_SERVER_URL, client_id=self._config.KEYCLOAK_CLIENT_ID, client_secret_key=self._config.KEYCLOAK_SECRET_KEY)
         self.mailcow = Mailcow(apiToken=self._config.MAILCOW_API_TOKEN)
         self.deactivationTracker = DeactivationTracker(storage_path=self._config.MAILCOW_PATH + "/data")
+        
+        # Track missing users - only deactivate after 5 consecutive misses
+        self.missing_users_file = self._config.MAILCOW_PATH + "/data/missing_users.json"
+        self.missing_users = self._load_missing_users()
+        self.MAX_MISSING_COUNT = 5  # Number of times a user must be missing before deactivation
 
         self.keycloak.initKeycloakAdmin()
+
+    def _load_missing_users(self) -> dict:
+        """Load the missing users tracking data from file"""
+        if os.path.exists(self.missing_users_file):
+            try:
+                with open(self.missing_users_file, 'r') as f:
+                    return json.load(f)
+            except Exception as e:
+                logging.warning(f"Could not load missing users file: {e}")
+        return {}
+    
+    def _save_missing_users(self):
+        """Save the missing users tracking data to file"""
+        try:
+            with open(self.missing_users_file, 'w') as f:
+                json.dump(self.missing_users, f, indent=2)
+        except Exception as e:
+            logging.error(f"Could not save missing users file: {e}")
 
     def start(self):
         logging.info("===== Edulution-Mailcow-Sync =====")
         while True:
-            if not self._sync():
-                logging.error("!!! Sync failed, see above errors !!!")
-                exit(1)
-            else:
-                logging.info("=== Sync finished successfully ===")
-                logging.info("")
-                logging.info(f"=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===")
-                logging.info("")
+            try:
+                if not self._sync():
+                    logging.error("!!! Sync failed, see above errors !!!")
+                    # Don't exit on sync failure, wait and retry
+                    logging.info(f"=== Retrying in {self._config.SYNC_INTERVAL} seconds ===")
+                    time.sleep(self._config.SYNC_INTERVAL)
+                else:
+                    logging.info("=== Sync finished successfully ===")
+                    logging.info("")
+                    logging.info(f"=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===")
+                    logging.info("")
+                    time.sleep(self._config.SYNC_INTERVAL)
+            except KeyboardInterrupt:
+                logging.info("Sync interrupted by user")
+                break
+            except Exception as e:
+                logging.error(f"Unexpected error during sync: {e}")
+                logging.info(f"=== Retrying in {self._config.SYNC_INTERVAL} seconds ===")
                 time.sleep(self._config.SYNC_INTERVAL)
 
     def _sync(self) -> bool:
@@ -53,6 +87,7 @@ class EdulutionMailcowSync:
 
         logging.info("* 1. Loading data from mailcow and keycloak")
 
+        # Load Mailcow data with retry logic
         try:
             domainList.loadRawData(self.mailcow.getDomains())
             mailboxList.loadRawData(self.mailcow.getMailboxes())
@@ -62,18 +97,48 @@ class EdulutionMailcowSync:
             logging.error(f"Failed to load data from mailcow: {e}")
             return False
         
-        try:
-            users = self.keycloak.getUsers()
-            groups = self.keycloak.getGroups()
-        except Exception as e:
-            logging.error(f"Failed to load data from keycloak: {e}")
+        # Load Keycloak data with retry logic
+        users = []
+        groups = []
+        keycloak_retries = 3
+        for attempt in range(keycloak_retries):
+            try:
+                users = self.keycloak.getUsers()
+                groups = self.keycloak.getGroups()
+                
+                # Validate that we got data
+                if not users:
+                    logging.warning(f"Keycloak returned empty user list on attempt {attempt + 1}/{keycloak_retries}")
+                    if attempt < keycloak_retries - 1:
+                        time.sleep(5)
+                        continue
+                else:
+                    # Success - got users
+                    break
+                    
+            except Exception as e:
+                logging.error(f"Failed to load data from keycloak (attempt {attempt + 1}/{keycloak_retries}): {e}")
+                if attempt < keycloak_retries - 1:
+                    logging.info("Retrying Keycloak connection...")
+                    time.sleep(5)
+                else:
+                    logging.error("All Keycloak retry attempts failed")
+                    return False
+        
+        # If we still have no users after all retries, skip this sync
+        if not users:
+            logging.error("Could not retrieve users from Keycloak - skipping sync to prevent accidental deactivations")
             return False
 
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
 
+        # Track which users we found in this sync
+        found_users = set()
+
         for user in users:
             mail = user["email"]
             maildomain = mail.split("@")[-1]
+            found_users.add(mail)
 
             if self.keycloak.checkGroupMembershipForUser(user["id"], self._config.GROUPS_TO_SYNC):
                 if not self._addDomain(maildomain, domainList):
@@ -103,6 +168,9 @@ class EdulutionMailcowSync:
 
             self._addAlias(mail, membermails, aliasList, sogo_visible = 0)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
+
+        # Update missing users tracking
+        self._update_missing_users_tracking(mailboxList, found_users)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
             logging.info("  * Everything is up-to-date!")
@@ -152,6 +220,45 @@ class EdulutionMailcowSync:
 
         return True
     
+    def _update_missing_users_tracking(self, mailboxList: MailboxListStorage, found_users: set):
+        """Update the tracking of missing users"""
+        # Get all current mailboxes
+        current_mailboxes = set()
+        for mailbox in mailboxList._rawData:
+            if 'username' in mailbox:
+                current_mailboxes.add(mailbox['username'])
+        
+        # Check which mailboxes are missing from Keycloak
+        for mailbox_email in current_mailboxes:
+            if mailbox_email not in found_users:
+                # User not found in Keycloak, increment counter
+                if mailbox_email not in self.missing_users:
+                    self.missing_users[mailbox_email] = 0
+                self.missing_users[mailbox_email] += 1
+                logging.info(f"  * User {mailbox_email} not found in Keycloak (missing count: {self.missing_users[mailbox_email]})")
+            else:
+                # User found, reset counter if exists
+                if mailbox_email in self.missing_users:
+                    del self.missing_users[mailbox_email]
+                    logging.info(f"  * User {mailbox_email} found again in Keycloak, resetting counter")
+        
+        # Clean up entries for users that no longer exist in mailcow
+        self.missing_users = {k: v for k, v in self.missing_users.items() if k in current_mailboxes}
+        
+        # Save the updated tracking data
+        self._save_missing_users()
+    
+    def _should_deactivate_mailbox(self, username: str) -> bool:
+        """Check if a mailbox should be deactivated based on missing count"""
+        if username in self.missing_users:
+            if self.missing_users[username] >= self.MAX_MISSING_COUNT:
+                logging.info(f"  * User {username} has been missing {self.missing_users[username]} times, will be deactivated")
+                return True
+            else:
+                logging.info(f"  * User {username} missing {self.missing_users[username]} times, waiting until {self.MAX_MISSING_COUNT} before deactivation")
+                return False
+        return True  # If not in tracking, deactivate immediately (backwards compatibility)
+    
     def _readConfig(self) -> ConfigurationStorage:
         config = ConfigurationStorage()
         config.load()
@@ -189,10 +296,14 @@ class EdulutionMailcowSync:
                 logging.info(f"  * Deleted filter {filter_id}")
         
         if soft_delete_enabled:
-            # Process deactivations for mailboxes
+            # Process deactivations for mailboxes - with missing count check
             for mailbox in mailboxList.disableQueue():
                 username = mailbox.get('username')
                 if username:
+                    # Check if user has been missing long enough
+                    if not self._should_deactivate_mailbox(username):
+                        continue  # Skip deactivation for now
+                    
                     # Check if already marked for deactivation
                     if not self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
                         # First deactivation: disable and mark with deletion date
@@ -212,6 +323,11 @@ class EdulutionMailcowSync:
                             "items": [username]
                         })
                         logging.info(f"  * Deactivated mailbox {username}")
+                        
+                        # Remove from missing users tracking after deactivation
+                        if username in self.missing_users:
+                            del self.missing_users[username]
+                            self._save_missing_users()
             
             # Process deactivations for domains
             for domain in domainList.disableQueue():
@@ -251,6 +367,10 @@ class EdulutionMailcowSync:
                 if username and self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
                     self.deactivationTracker.reactivate("mailboxes", username)
                     logging.info(f"  * Reactivated mailbox {username} (found in Keycloak again)")
+                    # Also remove from missing users tracking
+                    if username in self.missing_users:
+                        del self.missing_users[username]
+                        self._save_missing_users()
             
             for domain in domainList.addQueue() + domainList.updateQueue():
                 domain_name = domain.get('domain') if 'domain' in domain else domain.get('attr', {}).get('domain')
@@ -258,12 +378,21 @@ class EdulutionMailcowSync:
                     self.deactivationTracker.reactivate("domains", domain_name)
                     logging.info(f"  * Reactivated domain {domain_name} (found in Keycloak again)")
         else:
-            # Soft delete disabled - delete immediately
+            # Soft delete disabled - but still check missing count for mailboxes
             for mailbox in mailboxList.disableQueue():
                 username = mailbox.get('username')
                 if username:
+                    # Check if user has been missing long enough
+                    if not self._should_deactivate_mailbox(username):
+                        continue  # Skip deletion for now
+                    
                     self.mailcow.deleteMailbox(username)
                     logging.info(f"  * Deleted mailbox {username}")
+                    
+                    # Remove from missing users tracking after deletion
+                    if username in self.missing_users:
+                        del self.missing_users[username]
+                        self._save_missing_users()
             
             for domain in domainList.disableQueue():
                 domain_name = domain.get('domain_name')
