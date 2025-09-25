@@ -19,31 +19,8 @@ class EdulutionMailcowSync:
         self.keycloak = Keycloak(server_url=self._config.KEYCLOAK_SERVER_URL, client_id=self._config.KEYCLOAK_CLIENT_ID, client_secret_key=self._config.KEYCLOAK_SECRET_KEY)
         self.mailcow = Mailcow(apiToken=self._config.MAILCOW_API_TOKEN)
         self.deactivationTracker = DeactivationTracker(storage_path=self._config.MAILCOW_PATH + "/data")
-        
-        # Track missing users - only deactivate after 5 consecutive misses
-        self.missing_users_file = self._config.MAILCOW_PATH + "/data/missing_users.json"
-        self.missing_users = self._load_missing_users()
-        self.MAX_MISSING_COUNT = 5  # Number of times a user must be missing before deactivation
 
         self.keycloak.initKeycloakAdmin()
-
-    def _load_missing_users(self) -> dict:
-        """Load the missing users tracking data from file"""
-        if os.path.exists(self.missing_users_file):
-            try:
-                with open(self.missing_users_file, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                logging.warning(f"Could not load missing users file: {e}")
-        return {}
-    
-    def _save_missing_users(self):
-        """Save the missing users tracking data to file"""
-        try:
-            with open(self.missing_users_file, 'w') as f:
-                json.dump(self.missing_users, f, indent=2)
-        except Exception as e:
-            logging.error(f"Could not save missing users file: {e}")
 
     def start(self):
         logging.info("===== Edulution-Mailcow-Sync =====")
@@ -97,71 +74,23 @@ class EdulutionMailcowSync:
             logging.error(f"Failed to load data from mailcow: {e}")
             return False
         
-        # Load Keycloak data with separate retry logic for users and groups
-        keycloak_retries = 10
+        try:
+            users = self.keycloak.getUsers()                    
+        except Exception as e:
+            logging.error(f"Failed to load user from keycloak: {e}")
+            return False  # Users are essential, fail completely
         
-        # Try to load users
-        users = []
-        for attempt in range(keycloak_retries):
-            try:
-                users = self.keycloak.getUsers()
-                
-                # Validate that we got data
-                if not users:
-                    logging.warning(f"Keycloak returned empty user list on attempt {attempt + 1}/{keycloak_retries}")
-                    if attempt < keycloak_retries - 1:
-                        time.sleep(5)
-                        continue
-                else:
-                    # Success - got users
-                    logging.info(f"Successfully loaded {len(users)} users from Keycloak")
-                    break
-                    
-            except Exception as e:
-                logging.error(f"Failed to load users from keycloak (attempt {attempt + 1}/{keycloak_retries}): {e}")
-                if attempt < keycloak_retries - 1:
-                    logging.info("Retrying Keycloak user connection...")
-                    time.sleep(5)
-                else:
-                    logging.error("All Keycloak user retry attempts failed")
-                    return False  # Users are essential, fail completely
-        
-        # Try to load groups separately
-        groups = []
-        for attempt in range(keycloak_retries):
-            try:
-                groups = self.keycloak.getGroups()
-                
-                # Success - got groups
-                if groups:
-                    logging.info(f"Successfully loaded {len(groups)} groups from Keycloak")
-                else:
-                    logging.info("No groups found in Keycloak (this may be normal)")
-                break
-                    
-            except Exception as e:
-                logging.error(f"Failed to load groups from keycloak (attempt {attempt + 1}/{keycloak_retries}): {e}")
-                if attempt < keycloak_retries - 1:
-                    logging.info("Retrying Keycloak group connection...")
-                    time.sleep(5)
-                else:
-                    logging.error("All Keycloak group retry attempts failed - continuing without groups")
-                    return False  # Groups are essential, fail completely
-        
-        # If we have no users after all retries, skip this sync
-        if not users:
-            logging.error("Could not retrieve users from Keycloak - skipping sync to prevent accidental deactivations")
-            return False
+        try:
+            groups = self.keycloak.getGroups()
+        except Exception as e:
+            logging.error(f"Failed to load groups from keycloak: {e}")
+            return False  # Groups are essential, fail completely
 
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
-
-        # Track which users we found in this sync
-        found_users = set()
 
         for user in users:
             mail = user["email"]
             maildomain = mail.split("@")[-1]
-            found_users.add(mail)
 
             if self.keycloak.checkGroupMembershipForUser(user["id"], self._config.GROUPS_TO_SYNC):
                 if not self._addDomain(maildomain, domainList):
@@ -191,10 +120,6 @@ class EdulutionMailcowSync:
 
             self._addAlias(mail, membermails, aliasList, sogo_visible = 0)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
-
-        # Update missing users tracking BEFORE processing queues
-        # This must happen before we check the queues
-        self._update_missing_users_tracking(mailboxList, found_users)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
             logging.info("  * Everything is up-to-date!")
@@ -244,94 +169,14 @@ class EdulutionMailcowSync:
 
         return True
     
-    def _update_missing_users_tracking(self, mailboxList: MailboxListStorage, found_users: set):
-        """Update the tracking of missing users and remove them from disable queue if needed"""
-        # Process all mailboxes that are in the disable queue
-        mailboxes_to_keep_active = []
-        
-        for mailbox in mailboxList.disableQueue():
-            # The mailbox data from Mailcow API uses 'username' as the primary key
-            # It contains the full email address
-            username = None
-            
-            # Check different possible field names
-            if 'username' in mailbox:
-                username = mailbox['username']
-            elif 'local_part' in mailbox and 'domain' in mailbox:
-                username = mailbox['local_part'] + '@' + mailbox['domain']
-                
-            if not username:
-                logging.warning(f"Could not determine username from mailbox: {mailbox}")
-                continue
-                
-            # Check if this user was found in Keycloak
-            if username in found_users:
-                # User found, reset counter if exists
-                if username in self.missing_users:
-                    del self.missing_users[username]
-                    logging.info(f"  * User {username} found again in Keycloak, resetting counter")
-            else:
-                # User not found in Keycloak, increment counter
-                if username not in self.missing_users:
-                    self.missing_users[username] = 0
-                self.missing_users[username] += 1
-                logging.info(f"  * User {username} not found in Keycloak (missing count: {self.missing_users[username]})")
-                
-                # Check if we should keep this mailbox active for now
-                if self.missing_users[username] < self.MAX_MISSING_COUNT:
-                    mailboxes_to_keep_active.append((username, mailbox))
-                    logging.info(f"  * Keeping {username} active (only missing {self.missing_users[username]} times, threshold is {self.MAX_MISSING_COUNT})")
-        
-        # Remove mailboxes from disable queue that shouldn't be disabled yet
-        # We need to re-add them to prevent deactivation
-        for username, mailbox_data in mailboxes_to_keep_active:
-            # Re-add the mailbox to prevent it from being disabled
-            # This effectively removes it from the disable queue
-            domain = username.split('@')[1]
-            local_part = username.split('@')[0]
-            mailboxList.addElement({
-                "domain": domain,
-                "local_part": local_part,
-                "active": mailbox_data.get('active', 1),
-                "quota": mailbox_data.get('quota', 1024),
-                "name": mailbox_data.get('name', '')
-            }, username)
-        
-        # Clean up missing_users entries for users that no longer exist
-        existing_users = set()
-        for mailbox in mailboxList.disableQueue():
-            username = None
-            if 'username' in mailbox:
-                username = mailbox['username']
-            elif 'local_part' in mailbox and 'domain' in mailbox:
-                username = mailbox['local_part'] + '@' + mailbox['domain']
-            
-            if username:
-                existing_users.add(username)
-        
-        # Also add users from add and update queues
-        for mailbox in mailboxList.addQueue() + mailboxList.updateQueue():
-            if 'local_part' in mailbox and 'domain' in mailbox:
-                username = mailbox['local_part'] + '@' + mailbox['domain']
-                existing_users.add(username)
-            elif 'attr' in mailbox and 'local_part' in mailbox['attr'] and 'domain' in mailbox['attr']:
-                username = mailbox['attr']['local_part'] + '@' + mailbox['attr']['domain'] 
-                existing_users.add(username)
-        
-        # Remove tracking for non-existent users
-        self.missing_users = {k: v for k, v in self.missing_users.items() if k in existing_users}
-        
-        # Save the updated tracking data
-        self._save_missing_users()
-    
     def _should_deactivate_mailbox(self, username: str) -> bool:
         """Check if a mailbox should be deactivated based on missing count"""
         if username in self.missing_users:
             if self.missing_users[username] >= self.MAX_MISSING_COUNT:
-                logging.info(f"  * User {username} has been missing {self.missing_users[username]} times, will be deactivated")
+                logging.debug(f"  * User {username} has been missing {self.missing_users[username]} times, will be deactivated")
                 return True
             else:
-                logging.info(f"  * User {username} missing {self.missing_users[username]} times, waiting until {self.MAX_MISSING_COUNT} before deactivation")
+                logging.debug(f"  * User {username} missing {self.missing_users[username]} times, waiting until {self.MAX_MISSING_COUNT} before deactivation")
                 return False
         return True  # If not in tracking, deactivate immediately (backwards compatibility)
     
