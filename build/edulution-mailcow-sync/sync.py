@@ -235,11 +235,6 @@ class EdulutionMailcowSync:
                             "items": [username]
                         })
                         logging.info(f"  * Deactivated mailbox {username}")
-                        
-                        # Remove from missing users tracking after deactivation
-                        if username in self.missing_users:
-                            del self.missing_users[username]
-                            self._save_missing_users()
             
             # Process deactivations for domains
             for domain in domainList.disableQueue():
@@ -279,10 +274,6 @@ class EdulutionMailcowSync:
                 if username and self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
                     self.deactivationTracker.reactivate("mailboxes", username)
                     logging.info(f"  * Reactivated mailbox {username} (found in Keycloak again)")
-                    # Also remove from missing users tracking
-                    if username in self.missing_users:
-                        del self.missing_users[username]
-                        self._save_missing_users()
             
             for domain in domainList.addQueue() + domainList.updateQueue():
                 domain_name = domain.get('domain') if 'domain' in domain else domain.get('attr', {}).get('domain')
@@ -302,11 +293,6 @@ class EdulutionMailcowSync:
                 if username:
                     self.mailcow.deleteMailbox(username)
                     logging.info(f"  * Deleted mailbox {username}")
-                    
-                    # Remove from missing users tracking after deletion
-                    if username in self.missing_users:
-                        del self.missing_users[username]
-                        self._save_missing_users()
             
             for domain in domainList.disableQueue():
                 domain_name = domain.get('domain_name')
