@@ -98,7 +98,7 @@ class EdulutionMailcowSync:
             return False
         
         # Load Keycloak data with separate retry logic for users and groups
-        keycloak_retries = 3
+        keycloak_retries = 10
         
         # Try to load users
         users = []
@@ -124,6 +124,7 @@ class EdulutionMailcowSync:
                     time.sleep(5)
                 else:
                     logging.error("All Keycloak user retry attempts failed")
+                    return False  # Users are essential, fail completely
         
         # Try to load groups separately
         groups = []
@@ -145,7 +146,7 @@ class EdulutionMailcowSync:
                     time.sleep(5)
                 else:
                     logging.error("All Keycloak group retry attempts failed - continuing without groups")
-                    # Don't fail completely if groups fail - users are more important
+                    return False  # Groups are essential, fail completely
         
         # If we have no users after all retries, skip this sync
         if not users:
