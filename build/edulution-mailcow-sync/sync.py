@@ -97,14 +97,14 @@ class EdulutionMailcowSync:
             logging.error(f"Failed to load data from mailcow: {e}")
             return False
         
-        # Load Keycloak data with retry logic
-        users = []
-        groups = []
+        # Load Keycloak data with separate retry logic for users and groups
         keycloak_retries = 3
+        
+        # Try to load users
+        users = []
         for attempt in range(keycloak_retries):
             try:
                 users = self.keycloak.getUsers()
-                groups = self.keycloak.getGroups()
                 
                 # Validate that we got data
                 if not users:
@@ -114,18 +114,40 @@ class EdulutionMailcowSync:
                         continue
                 else:
                     # Success - got users
+                    logging.info(f"Successfully loaded {len(users)} users from Keycloak")
                     break
                     
             except Exception as e:
-                logging.error(f"Failed to load data from keycloak (attempt {attempt + 1}/{keycloak_retries}): {e}")
+                logging.error(f"Failed to load users from keycloak (attempt {attempt + 1}/{keycloak_retries}): {e}")
                 if attempt < keycloak_retries - 1:
-                    logging.info("Retrying Keycloak connection...")
+                    logging.info("Retrying Keycloak user connection...")
                     time.sleep(5)
                 else:
-                    logging.error("All Keycloak retry attempts failed")
-                    return False
+                    logging.error("All Keycloak user retry attempts failed")
         
-        # If we still have no users after all retries, skip this sync
+        # Try to load groups separately
+        groups = []
+        for attempt in range(keycloak_retries):
+            try:
+                groups = self.keycloak.getGroups()
+                
+                # Success - got groups
+                if groups:
+                    logging.info(f"Successfully loaded {len(groups)} groups from Keycloak")
+                else:
+                    logging.info("No groups found in Keycloak (this may be normal)")
+                break
+                    
+            except Exception as e:
+                logging.error(f"Failed to load groups from keycloak (attempt {attempt + 1}/{keycloak_retries}): {e}")
+                if attempt < keycloak_retries - 1:
+                    logging.info("Retrying Keycloak group connection...")
+                    time.sleep(5)
+                else:
+                    logging.error("All Keycloak group retry attempts failed - continuing without groups")
+                    # Don't fail completely if groups fail - users are more important
+        
+        # If we have no users after all retries, skip this sync
         if not users:
             logging.error("Could not retrieve users from Keycloak - skipping sync to prevent accidental deactivations")
             return False
@@ -222,9 +244,10 @@ class EdulutionMailcowSync:
     
     def _update_missing_users_tracking(self, mailboxList: MailboxListStorage, found_users: set):
         """Update the tracking of missing users"""
-        # Get all current mailboxes
+        # Get all current mailboxes from disable queue (these are the existing mailboxes)
         current_mailboxes = set()
-        for mailbox in mailboxList._rawData:
+        # The disable queue contains all existing managed mailboxes that weren't found in Keycloak
+        for mailbox in mailboxList.disableQueue():
             if 'username' in mailbox:
                 current_mailboxes.add(mailbox['username'])
         
