@@ -74,7 +74,7 @@ class Keycloak:
                 except Exception as e:
                     logging.warning(f"    -> Failed to get users batch starting at {first} (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(10)
                     else:
                         logging.error(f"    -> Failed to retrieve users batch after {max_retries} attempts")
                         raise
@@ -95,7 +95,7 @@ class Keycloak:
                 # No more users
                 break
         
-        logging.info(f"    -> Successfully retrieved {len(result)} users with email addresses")
+        logging.info(f"    -> Successfully retrieved {len(result)} users")
         return result
     
     def getGroups(self) -> list:
@@ -123,7 +123,7 @@ class Keycloak:
                 except Exception as e:
                     logging.warning(f"    -> Failed to get groups batch starting at {first} (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(2)
+                        time.sleep(10)
                     else:
                         logging.error(f"    -> Failed to retrieve groups batch after {max_retries} attempts")
                         raise
@@ -139,8 +139,7 @@ class Keycloak:
                                 result.append(group_details)
                     except Exception as e:
                         logging.warning(f"    -> Failed to get details for group {group.get('name', 'unknown')}: {e}")
-                        # Continue with next group rather than failing
-                        continue
+                        raise
                 
                 logging.debug(f"    -> Retrieved batch: {len(groups_batch)} groups (mailing lists found: {len(result)})")
                 
@@ -154,7 +153,7 @@ class Keycloak:
                 # No more groups
                 break
         
-        logging.info(f"    -> Successfully retrieved {len(result)} mailing list groups")
+        logging.info(f"    -> Successfully retrieved {len(result)} groups")
         return result
     
     def getGroupMembers(self, group: dict) -> list:
@@ -184,7 +183,7 @@ class Keycloak:
                 except Exception as e:
                     logging.warning(f"       -> Failed to get members batch for group {group['name']} (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(1)
+                        time.sleep(10)
                     else:
                         logging.error(f"       -> Failed to retrieve members after {max_retries} attempts")
                         raise

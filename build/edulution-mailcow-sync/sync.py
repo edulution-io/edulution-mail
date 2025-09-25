@@ -169,17 +169,6 @@ class EdulutionMailcowSync:
 
         return True
     
-    def _should_deactivate_mailbox(self, username: str) -> bool:
-        """Check if a mailbox should be deactivated based on missing count"""
-        if username in self.missing_users:
-            if self.missing_users[username] >= self.MAX_MISSING_COUNT:
-                logging.debug(f"  * User {username} has been missing {self.missing_users[username]} times, will be deactivated")
-                return True
-            else:
-                logging.debug(f"  * User {username} missing {self.missing_users[username]} times, waiting until {self.MAX_MISSING_COUNT} before deactivation")
-                return False
-        return True  # If not in tracking, deactivate immediately (backwards compatibility)
-    
     def _readConfig(self) -> ConfigurationStorage:
         config = ConfigurationStorage()
         config.load()
@@ -227,10 +216,6 @@ class EdulutionMailcowSync:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
                 
                 if username:
-                    # Check if user has been missing long enough
-                    if not self._should_deactivate_mailbox(username):
-                        continue  # Skip deactivation for now
-                    
                     # Check if already marked for deactivation
                     if not self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
                         # First deactivation: disable and mark with deletion date
@@ -315,10 +300,6 @@ class EdulutionMailcowSync:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
                 
                 if username:
-                    # Check if user has been missing long enough
-                    if not self._should_deactivate_mailbox(username):
-                        continue  # Skip deletion for now
-                    
                     self.mailcow.deleteMailbox(username)
                     logging.info(f"  * Deleted mailbox {username}")
                     
