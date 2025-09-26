@@ -41,7 +41,7 @@ class EdulutionMailcowSync:
                 logging.info("Sync interrupted by user")
                 break
             except Exception as e:
-                logging.error(f"Unexpected error during sync: {e}")
+                logging.exception(f"Unexpected error during sync: {e}")
                 logging.info(f"=== Retrying in {self._config.RETRY_INTERVAL} seconds ===")
                 time.sleep(self._config.RETRY_INTERVAL)
 
@@ -77,13 +77,13 @@ class EdulutionMailcowSync:
         try:
             users = self.keycloak.getUsers()                    
         except Exception as e:
-            logging.error(f"Failed to load user from keycloak: {e}")
+            logging.exception(f"Failed to load user from keycloak: {e}")
             return False  # Users are essential, fail completely
         
         try:
             groups = self.keycloak.getGroups()
         except Exception as e:
-            logging.error(f"Failed to load groups from keycloak: {e}")
+            logging.exception(f"Failed to load groups from keycloak: {e}")
             return False  # Groups are essential, fail completely
 
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
