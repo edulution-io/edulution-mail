@@ -29,8 +29,8 @@ class EdulutionMailcowSync:
                 if not self._sync():
                     logging.error("!!! Sync failed, see above errors !!!")
                     # Don't exit on sync failure, wait and retry
-                    logging.info(f"=== Retrying in {self._config.SYNC_INTERVAL} seconds ===")
-                    time.sleep(self._config.SYNC_INTERVAL)
+                    logging.info(f"=== Retrying in {self._config.RETRY_INTERVAL} seconds ===")
+                    time.sleep(self._config.RETRY_INTERVAL)
                 else:
                     logging.info("=== Sync finished successfully ===")
                     logging.info("")
@@ -42,8 +42,8 @@ class EdulutionMailcowSync:
                 break
             except Exception as e:
                 logging.error(f"Unexpected error during sync: {e}")
-                logging.info(f"=== Retrying in {self._config.SYNC_INTERVAL} seconds ===")
-                time.sleep(self._config.SYNC_INTERVAL)
+                logging.info(f"=== Retrying in {self._config.RETRY_INTERVAL} seconds ===")
+                time.sleep(self._config.RETRY_INTERVAL)
 
     def _sync(self) -> bool:
         logging.info("=== Starting Edulution-Mailcow-Sync ===")
@@ -102,6 +102,10 @@ class EdulutionMailcowSync:
         for group in groups:
             mail = group["attributes"]["mail"][0]
             maildomain = mail.split("@")[-1]
+
+            description = mail
+            if "description" in group["attributes"]:
+                description = group["attributes"]["description"][0]
             
             membermails = []
             for member in group["members"]:
@@ -118,7 +122,7 @@ class EdulutionMailcowSync:
                 logging.debug(f"    -> Mailinglist {mail} has no members, skipping!")
                 continue
 
-            self._addAlias(mail, membermails, aliasList, sogo_visible = 0)
+            self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
@@ -335,13 +339,14 @@ class EdulutionMailcowSync:
 
         return True
 
-    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1) -> bool:
+    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1, alias_description: str = "") -> bool:
         goto_targets = ",".join(goto) if isinstance(goto, list) else goto
         return aliasList.addElement({
             "address": alias,
             "goto": goto_targets,
             "active": 1,
-            "sogo_visible": sogo_visible
+            "sogo_visible": sogo_visible,
+            "private_comment": alias_description
         }, alias)
 
     # def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):

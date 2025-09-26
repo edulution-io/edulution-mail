@@ -18,6 +18,7 @@ class ConfigurationStorage:
         self.ENABLE_GAL = os.environ.get("ENABLE_GAL", 1)
 
         self.SYNC_INTERVAL = os.environ.get("SYNC_INTERVAL", 300)
+        self.RETRY_INTERVAL = int(self.SYNC_INTERVAL) // 5 if int(self.SYNC_INTERVAL) >= 60 else 10
         
         self.SOFT_DELETE_ENABLED = int(os.environ.get("SOFT_DELETE_ENABLED", 1))
         self.SOFT_DELETE_GRACE_PERIOD = int(os.environ.get("SOFT_DELETE_GRACE_PERIOD", 2592000))  # 30 days default

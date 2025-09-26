@@ -53,7 +53,7 @@ class Keycloak:
         logging.info("  * Downloading list of users from keycloak...")
         result = []
         first = 0  # Starting position
-        max_retries = 3
+        max_retries = 6
         
         while True:
             users_batch = None
@@ -74,7 +74,8 @@ class Keycloak:
                 except Exception as e:
                     logging.warning(f"    -> Failed to get users batch starting at {first} (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(10)
+                        logging.warning(f"    -> Waiting {(attempt + 1) * 10} seconds before retrying...")
+                        time.sleep((attempt + 1) * 10)
                     else:
                         logging.error(f"    -> Failed to retrieve users batch after {max_retries} attempts")
                         raise
@@ -103,7 +104,7 @@ class Keycloak:
         logging.info("  * Downloading list of groups from keycloak...")
         result = []
         first = 0  # Starting position
-        max_retries = 3
+        max_retries = 6
         
         while True:
             groups_batch = None
@@ -123,7 +124,8 @@ class Keycloak:
                 except Exception as e:
                     logging.warning(f"    -> Failed to get groups batch starting at {first} (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(10)
+                        logging.warning(f"    -> Waiting {(attempt + 1) * 10} seconds before retrying...")
+                        time.sleep((attempt + 1) * 10)
                     else:
                         logging.error(f"    -> Failed to retrieve groups batch after {max_retries} attempts")
                         raise
@@ -161,7 +163,7 @@ class Keycloak:
         logging.info(f"    -> Loading members for group {group['name']}")
         members = []
         first = 0
-        max_retries = 3
+        max_retries = 6
         
         while True:
             members_batch = None
@@ -183,7 +185,8 @@ class Keycloak:
                 except Exception as e:
                     logging.warning(f"       -> Failed to get members batch for group {group['name']} (attempt {attempt + 1}/{max_retries}): {e}")
                     if attempt < max_retries - 1:
-                        time.sleep(10)
+                        logging.warning(f"       -> Waiting {(attempt + 1) * 10} seconds before retrying...")
+                        time.sleep((attempt + 1) * 10)
                     else:
                         logging.error(f"       -> Failed to retrieve members after {max_retries} attempts")
                         raise
