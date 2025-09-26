@@ -82,7 +82,12 @@ class Keycloak:
             
             # Process the batch
             if users_batch:
-                users_with_email = [user for user in users_batch if "email" in user]
+                # Check if we got a valid list response
+                if not isinstance(users_batch, list):
+                    logging.error(f"    -> Unexpected response type from Keycloak: {type(users_batch)} - {users_batch}")
+                    raise Exception(f"Keycloak returned invalid data type: {type(users_batch)}")
+                
+                users_with_email = [user for user in users_batch if isinstance(user, dict) and "email" in user]
                 result.extend(users_with_email)
                 logging.debug(f"    -> Retrieved batch: {len(users_batch)} users, {len(users_with_email)} with email (total so far: {len(result)})")
                 
@@ -132,6 +137,11 @@ class Keycloak:
             
             # Process the batch
             if groups_batch:
+                # Check if we got a valid list response
+                if not isinstance(groups_batch, list):
+                    logging.error(f"    -> Unexpected response type from Keycloak: {type(groups_batch)} - {groups_batch}")
+                    raise Exception(f"Keycloak returned invalid data type: {type(groups_batch)}")
+                
                 for group in groups_batch:
                     try:
                         group_details = self.keycloak_admin.get_group(group["id"])
@@ -192,6 +202,11 @@ class Keycloak:
                         raise
             
             if members_batch:
+                # Check if we got a valid list response
+                if not isinstance(members_batch, list):
+                    logging.error(f"       -> Unexpected response type from Keycloak: {type(members_batch)} - {members_batch}")
+                    raise Exception(f"Keycloak returned invalid data type: {type(members_batch)}")
+                
                 members.extend(members_batch)
                 
                 # Check if we got fewer members than requested

@@ -109,6 +109,9 @@ class EdulutionMailcowSync:
             
             membermails = []
             for member in group["members"]:
+                if "id" not in member:
+                    logging.warning(f"    -> Member {member} without ID in group {mail}, skipping!")
+                    continue
                 if self.keycloak.checkGroupMembershipForUser(member["id"], self._config.GROUPS_TO_SYNC):
                     if "email" not in member:
                         logging.error(f"    -> Member {member['id']} ({member.get('username', 'n/a')}) has not email attribute!")
