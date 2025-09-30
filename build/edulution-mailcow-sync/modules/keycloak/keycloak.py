@@ -51,6 +51,10 @@ class Keycloak:
     def getUsers(self) -> list:
         """Get all users with pagination and retry logic"""
         logging.info("  * Downloading list of users from keycloak...")
+
+        users_count = self.keycloak_admin.users_count()
+        logging.info(f"    -> Total users in Keycloak: {users_count}")
+
         result = []
         first = 0  # Starting position
         max_retries = 6
@@ -102,6 +106,11 @@ class Keycloak:
                 break
         
         logging.info(f"    -> Successfully retrieved {len(result)} users")
+
+        if users_count != len(result):
+            logging.warning(f"    -> Warning: Expected {users_count} users but retrieved {len(result)} users")
+            raise Exception("Mismatch in expected and retrieved user count")
+
         return result
     
     def getGroups(self) -> list:

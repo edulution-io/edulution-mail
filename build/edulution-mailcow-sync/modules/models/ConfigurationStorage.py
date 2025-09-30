@@ -66,9 +66,10 @@ class ConfigurationStorage:
                 self.DEFAULT_USER_QUOTA = int(override_config["DEFAULT_USER_QUOTA"])
 
             if "GROUPS_TO_SYNC" in override_config:
-                logging.info(f"* OVERRIDE GROUPS_TO_SYNC: {self.GROUPS_TO_SYNC} with {override_config['GROUPS_TO_SYNC']}")
-                self.GROUPS_TO_SYNC = override_config["GROUPS_TO_SYNC"]
-                self.GROUPS_TO_SYNC = self.GROUPS_TO_SYNC.split(",") if "," in self.GROUPS_TO_SYNC else [ self.GROUPS_TO_SYNC ]
+                new_groups = override_config["GROUPS_TO_SYNC"]
+                new_groups = self.GROUPS_TO_SYNC.split(",") if "," in new_groups else [ new_groups ]
+                logging.info(f"* OVERRIDE GROUPS_TO_SYNC: {self.GROUPS_TO_SYNC} with {new_groups}")
+                self.GROUPS_TO_SYNC = new_groups
             
             if "DOMAIN_QUOTA" in override_config:
                 logging.info(f"* OVERRIDE DOMAIN_QUOTA: {self.DOMAIN_QUOTA} with {override_config['DOMAIN_QUOTA']}")
