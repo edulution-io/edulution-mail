@@ -67,7 +67,7 @@ class ConfigurationStorage:
 
             if "GROUPS_TO_SYNC" in override_config:
                 new_groups = override_config["GROUPS_TO_SYNC"]
-                new_groups = self.GROUPS_TO_SYNC.split(",") if "," in new_groups else [ new_groups ]
+                new_groups = new_groups.split(",") if "," in new_groups else [ new_groups ]
                 logging.info(f"* OVERRIDE GROUPS_TO_SYNC: {self.GROUPS_TO_SYNC} with {new_groups}")
                 self.GROUPS_TO_SYNC = new_groups
             
