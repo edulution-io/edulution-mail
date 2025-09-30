@@ -12,7 +12,7 @@ class Keycloak:
         self.server_url = server_url
         self.client_id = client_id
         self.client_secret_key = client_secret_key
-        self.page_size = 100  # Number of users per page
+        self.page_size = 50  # Number of users per page
 
     def initKeycloakOpenID(self) -> None:
         self.keycloak_openid = KeycloakOpenID(
@@ -72,7 +72,7 @@ class Keycloak:
                         "max": self.page_size
                     })
                     
-                    if users_batch is not None:
+                    if users_batch is not None and isinstance(users_batch, list):
                         break
                         
                 except Exception as e:
