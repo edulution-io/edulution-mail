@@ -22,6 +22,8 @@ class ConfigurationStorage:
         
         self.SOFT_DELETE_ENABLED = int(os.environ.get("SOFT_DELETE_ENABLED", 1))
         self.SOFT_DELETE_GRACE_PERIOD = int(os.environ.get("SOFT_DELETE_GRACE_PERIOD", 2592000))  # 30 days default
+        self.SOFT_DELETE_MARK_COUNT = int(os.environ.get("SOFT_DELETE_MARK_COUNT", 10))  # Number of marks before deactivation
+        self.PERMANENT_DELETE_ENABLED = int(os.environ.get("PERMANENT_DELETE_ENABLED", 1))  # Enable permanent deletion after grace period
 
         self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False) # entrypoint.sh set this as environment variable
         self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "edu-mailcow-sync")
@@ -46,6 +48,8 @@ class ConfigurationStorage:
         - SYNC_INTERVAL
         - SOFT_DELETE_ENABLED
         - SOFT_DELETE_GRACE_PERIOD
+        - SOFT_DELETE_MARK_COUNT
+        - PERMANENT_DELETE_ENABLED
         """
 
         OVERRIDE_FILE = os.environ.get("MAILCOW_PATH", "/srv/docker/edulution-mail") + "/mail.override.config"
@@ -90,6 +94,14 @@ class ConfigurationStorage:
             if "SOFT_DELETE_GRACE_PERIOD" in override_config:
                 logging.info(f"* OVERRIDE SOFT_DELETE_GRACE_PERIOD: {self.SOFT_DELETE_GRACE_PERIOD} with {override_config['SOFT_DELETE_GRACE_PERIOD']}")
                 self.SOFT_DELETE_GRACE_PERIOD = int(override_config["SOFT_DELETE_GRACE_PERIOD"])
+            
+            if "SOFT_DELETE_MARK_COUNT" in override_config:
+                logging.info(f"* OVERRIDE SOFT_DELETE_MARK_COUNT: {self.SOFT_DELETE_MARK_COUNT} with {override_config['SOFT_DELETE_MARK_COUNT']}")
+                self.SOFT_DELETE_MARK_COUNT = int(override_config["SOFT_DELETE_MARK_COUNT"])
+            
+            if "PERMANENT_DELETE_ENABLED" in override_config:
+                logging.info(f"* OVERRIDE PERMANENT_DELETE_ENABLED: {self.PERMANENT_DELETE_ENABLED} with {override_config['PERMANENT_DELETE_ENABLED']}")
+                self.PERMANENT_DELETE_ENABLED = int(override_config["PERMANENT_DELETE_ENABLED"])
 
             logging.info("==========================================================")
             

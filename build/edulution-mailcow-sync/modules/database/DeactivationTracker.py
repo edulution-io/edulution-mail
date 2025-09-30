@@ -6,9 +6,10 @@ from datetime import datetime
 
 class DeactivationTracker:
     
-    def __init__(self, storage_path="/srv/docker/edulution-mail/data"):
+    def __init__(self, storage_path="/srv/docker/edulution-mail/data", mark_count_threshold=3):
         self.storage_path = storage_path
         self.storage_file = os.path.join(storage_path, "deactivation_tracker.json")
+        self.mark_count_threshold = mark_count_threshold
         self.data = {
             "domains": {},
             "mailboxes": {},
@@ -46,20 +47,20 @@ class DeactivationTracker:
                 "last_marked_at": time.time(),
                 "deactivated": False
             }
-            logging.info(f"  * First mark for {item_type} {item_id} (1/3)")
+            logging.info(f"  * First mark for {item_type} {item_id} (1/{self.mark_count_threshold})")
         else:
             # If already deactivated, don't increment counter
             if self.data[item_type][item_id].get("deactivated", False):
                 return True
             
             current_count = self.data[item_type][item_id].get("mark_count", 0)
-            if current_count < 3:
+            if current_count < self.mark_count_threshold:
                 self.data[item_type][item_id]["mark_count"] = current_count + 1
                 self.data[item_type][item_id]["last_marked_at"] = time.time()
-                logging.info(f"  * Mark {current_count + 1}/3 for {item_type} {item_id}")
+                logging.info(f"  * Mark {current_count + 1}/{self.mark_count_threshold} for {item_type} {item_id}")
             
-            # On third mark, set for actual deactivation
-            if self.data[item_type][item_id]["mark_count"] >= 3 and not self.data[item_type][item_id].get("deactivated", False):
+            # On threshold mark, set for actual deactivation
+            if self.data[item_type][item_id]["mark_count"] >= self.mark_count_threshold and not self.data[item_type][item_id].get("deactivated", False):
                 delete_at = time.time() + grace_period_seconds
                 delete_at_readable = datetime.fromtimestamp(delete_at).strftime('%Y-%m-%d %H:%M:%S')
                 
@@ -68,10 +69,10 @@ class DeactivationTracker:
                 self.data[item_type][item_id]["delete_at"] = delete_at
                 self.data[item_type][item_id]["delete_at_readable"] = delete_at_readable
                 
-                logging.info(f"  * {item_type} {item_id} marked for deletion at {delete_at_readable} after 3 marks")
+                logging.info(f"  * {item_type} {item_id} marked for deletion at {delete_at_readable} after {self.mark_count_threshold} marks")
         
         self.save()
-        return self.data[item_type][item_id].get("mark_count", 0) >= 3
+        return self.data[item_type][item_id].get("mark_count", 0) >= self.mark_count_threshold
     
     def reactivate(self, item_type: str, item_id: str):
         if item_type in self.data and item_id in self.data[item_type]:

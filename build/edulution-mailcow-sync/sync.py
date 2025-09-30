@@ -17,7 +17,10 @@ class EdulutionMailcowSync:
 
         self.keycloak = Keycloak(server_url=self._config.KEYCLOAK_SERVER_URL, client_id=self._config.KEYCLOAK_CLIENT_ID, client_secret_key=self._config.KEYCLOAK_SECRET_KEY)
         self.mailcow = Mailcow(apiToken=self._config.MAILCOW_API_TOKEN)
-        self.deactivationTracker = DeactivationTracker(storage_path=self._config.MAILCOW_PATH + "/data")
+        self.deactivationTracker = DeactivationTracker(
+            storage_path=self._config.MAILCOW_PATH + "/data",
+            mark_count_threshold=self._config.SOFT_DELETE_MARK_COUNT
+        )
 
         self.keycloak.initKeycloakAdmin()
 
@@ -201,13 +204,7 @@ class EdulutionMailcowSync:
         grace_period = self._config.SOFT_DELETE_GRACE_PERIOD
         soft_delete_enabled = self._config.SOFT_DELETE_ENABLED
         
-        # Process immediate deletions for aliases and filters
-        for alias in aliasList.disableQueue():
-            alias_id = alias.get('id') or alias.get('address')
-            if alias_id:
-                self.mailcow.deleteAlias(alias_id)
-                logging.info(f"  * Deleted alias {alias_id}")
-        
+        # Process deletions for filters (always immediate)
         for filter in filterList.disableQueue():
             filter_id = filter.get('id')
             if filter_id:
@@ -215,6 +212,16 @@ class EdulutionMailcowSync:
                 logging.info(f"  * Deleted filter {filter_id}")
         
         if soft_delete_enabled:
+            # Process deactivations for aliases with mark counting
+            for alias in aliasList.disableQueue():
+                alias_id = alias.get('id') or alias.get('address')
+                if alias_id:
+                    # Mark for deactivation (will only delete after threshold marks)
+                    if self.deactivationTracker.markForDeactivation("aliases", alias_id, grace_period):
+                        # Threshold reached - actually delete
+                        self.mailcow.deleteAlias(alias_id)
+                        logging.info(f"  * Deleted alias {alias_id} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+            
             # Process deactivations for mailboxes - with missing count check
             for mailbox in mailboxList.disableQueue():
                 # Get username from mailbox data
@@ -238,7 +245,7 @@ class EdulutionMailcowSync:
                             },
                             "items": [username]
                         })
-                        logging.info(f"  * Deactivated mailbox {username} after 3 marks")
+                        logging.info(f"  * Deactivated mailbox {username} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
             
             # Process deactivations for domains
             for domain in domainList.disableQueue():
@@ -254,18 +261,24 @@ class EdulutionMailcowSync:
                             },
                             "items": [domain_name]
                         })
-                        logging.info(f"  * Deactivated domain {domain_name} after 3 marks")
+                        logging.info(f"  * Deactivated domain {domain_name} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
             
-            # Check for items to permanently delete
-            for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
-                if self.mailcow.deleteMailbox(mailbox_id):
-                    self.deactivationTracker.removeDeleted("mailboxes", mailbox_id)
-                    logging.info(f"  * Permanently deleted mailbox {mailbox_id}")
-            
-            for domain_id in self.deactivationTracker.getItemsToDelete("domains"):
-                if self.mailcow.deleteDomain(domain_id):
-                    self.deactivationTracker.removeDeleted("domains", domain_id)
-                    logging.info(f"  * Permanently deleted domain {domain_id}")
+            # Check for items to permanently delete (if enabled)
+            if self._config.PERMANENT_DELETE_ENABLED:
+                for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
+                    if self.mailcow.deleteMailbox(mailbox_id):
+                        self.deactivationTracker.removeDeleted("mailboxes", mailbox_id)
+                        logging.info(f"  * Permanently deleted mailbox {mailbox_id}")
+                
+                for domain_id in self.deactivationTracker.getItemsToDelete("domains"):
+                    if self.mailcow.deleteDomain(domain_id):
+                        self.deactivationTracker.removeDeleted("domains", domain_id)
+                        logging.info(f"  * Permanently deleted domain {domain_id}")
+                
+                # Also check for aliases to permanently delete
+                for alias_id in self.deactivationTracker.getItemsToDelete("aliases"):
+                    self.deactivationTracker.removeDeleted("aliases", alias_id)
+                    # Aliases are already deleted when deactivated, just clean up tracker
             
             # Reactivate items that reappeared in Keycloak
             for mailbox in mailboxList.addQueue() + mailboxList.updateQueue():
@@ -280,7 +293,13 @@ class EdulutionMailcowSync:
                     self.deactivationTracker.reactivate("domains", domain_name)
                     logging.info(f"  * Reactivated domain {domain_name} (found in Keycloak again)")
         else:
-            # Soft delete disabled - but still check missing count for mailboxes
+            # Soft delete disabled - immediate deletion
+            for alias in aliasList.disableQueue():
+                alias_id = alias.get('id') or alias.get('address')
+                if alias_id:
+                    self.mailcow.deleteAlias(alias_id)
+                    logging.info(f"  * Deleted alias {alias_id}")
+            
             for mailbox in mailboxList.disableQueue():
                 # Get username from mailbox data
                 username = None
