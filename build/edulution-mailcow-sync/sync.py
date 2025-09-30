@@ -88,6 +88,9 @@ class EdulutionMailcowSync:
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
 
         for user in users:
+            if "email" not in user:
+                continue
+            
             mail = user["email"]
             maildomain = mail.split("@")[-1]
 

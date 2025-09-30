@@ -91,9 +91,11 @@ class Keycloak:
                     logging.error(f"    -> Unexpected response type from Keycloak: {type(users_batch)} - {users_batch}")
                     raise Exception(f"Keycloak returned invalid data type: {type(users_batch)}")
                 
-                users_with_email = [user for user in users_batch if isinstance(user, dict) and "email" in user]
-                result.extend(users_with_email)
-                logging.debug(f"    -> Retrieved batch: {len(users_batch)} users, {len(users_with_email)} with email (total so far: {len(result)})")
+                result.extend(users_batch)
+
+                # users_with_email = [user for user in users_batch if isinstance(user, dict) and "email" in user]
+                # result.extend(users_with_email)
+                # logging.debug(f"    -> Retrieved batch: {len(users_batch)} users, {len(users_with_email)} with email (total so far: {len(result)})")
                 
                 # Check if we got fewer users than requested (indicates last page)
                 if len(users_batch) < self.page_size:
