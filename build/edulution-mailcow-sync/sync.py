@@ -5,7 +5,6 @@ import string
 import time
 import logging
 import os
-import json
 
 from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage, DeactivationTracker
 
@@ -223,46 +222,36 @@ class EdulutionMailcowSync:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
                 
                 if username:
-                    # Check if already marked for deactivation
-                    if not self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
-                        # First deactivation: disable and mark with deletion date
-                        self.deactivationTracker.markForDeactivation("mailboxes", username, grace_period)
-                        description = self.deactivationTracker.formatDescriptionWithDeletionDate(
-                            mailbox.get('name', ''), "mailboxes", username
-                        )
+                    # Mark for deactivation (will only deactivate after 3 marks)
+                    if self.deactivationTracker.markForDeactivation("mailboxes", username, grace_period):
+                        # Third mark reached - actually deactivate
                         # Extract local_part and domain for the update
                         local_part, domain = username.split('@')
                         self.mailcow.updateMailbox({
                             "attr": {
                                 "active": 0,
-                                "name": description,
                                 "local_part": local_part,
                                 "domain": domain
                             },
                             "items": [username]
                         })
-                        logging.info(f"  * Deactivated mailbox {username}")
+                        logging.info(f"  * Deactivated mailbox {username} after 3 marks")
             
             # Process deactivations for domains
             for domain in domainList.disableQueue():
                 domain_name = domain.get('domain_name')
                 if domain_name:
-                    # Check if already marked for deactivation
-                    if not self.deactivationTracker.isMarkedForDeactivation("domains", domain_name):
-                        # First deactivation: disable and mark with deletion date
-                        self.deactivationTracker.markForDeactivation("domains", domain_name, grace_period)
-                        description = self.deactivationTracker.formatDescriptionWithDeletionDate(
-                            domain.get('description', ''), "domains", domain_name
-                        )
+                    # Mark for deactivation (will only deactivate after 3 marks)
+                    if self.deactivationTracker.markForDeactivation("domains", domain_name, grace_period):
+                        # Third mark reached - actually deactivate
                         self.mailcow.updateDomain({
                             "attr": {
                                 "active": 0,
-                                "description": description,
                                 "domain": domain_name
                             },
                             "items": [domain_name]
                         })
-                        logging.info(f"  * Deactivated domain {domain_name}")
+                        logging.info(f"  * Deactivated domain {domain_name} after 3 marks")
             
             # Check for items to permanently delete
             for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
