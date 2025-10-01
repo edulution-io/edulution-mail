@@ -110,77 +110,88 @@ create_edulution_view() {
     mysql -h mysql -u $DBUSER -p$DBPASS $DBNAME <<'EOSQL'
 CREATE OR REPLACE VIEW edulution_gal AS
 
--- Mailboxen mit allen eigenen Aliassen
+-- Mailboxen (nur Hauptadresse in mail)
 SELECT
     m.username                        AS c_uid,
+    m.domain                          AS domain,
     m.username                        AS c_name,
+    m.password                        AS c_password,
     m.name                            AS c_cn,
-    NULL                              AS givenname,
-    NULL                              AS sn,
-    CONCAT_WS(';',
-        m.username,
-        (
-            SELECT GROUP_CONCAT(DISTINCT a.address ORDER BY a.address SEPARATOR ';')
-            FROM alias a
-            WHERE a.active = 1
-              AND a.goto NOT LIKE '%,%'
-              AND FIND_IN_SET(m.username, REPLACE(a.goto, ' ', '')) > 0
-              AND a.address <> m.username
-        )
-    )                                 AS mail,
-    NULL                              AS telephonenumber,
-    NULL                              AS mobile,
-    NULL                              AS homephone,
-    NULL                              AS street,
-    NULL                              AS l,
-    NULL                              AS postalcode,
-    NULL                              AS o,
-    NULL                              AS title,
-    NULL                              AS url,
-    NULL                              AS note,
-    GREATEST(
-        IFNULL(m.modified, m.created),
-        IFNULL((
-            SELECT MAX(a.modified)
-            FROM alias a
-            WHERE a.active = 1
-              AND a.goto NOT LIKE '%,%'
-              AND FIND_IN_SET(m.username, REPLACE(a.goto, ' ', '')) > 0
-              AND a.address <> m.username
-        ), m.created)
-    )                                 AS updated_at
+    NULL                              AS c_l,
+    NULL                              AS c_o,
+    NULL                              AS c_ou,
+    NULL                              AS c_telephonenumber,
+    m.username                        AS mail,
+    (
+      SELECT GROUP_CONCAT(a.address ORDER BY a.address SEPARATOR ' ')
+      FROM alias a
+      WHERE a.active=1
+        AND a.sogo_visible=1
+        AND a.goto = m.username
+        AND a.address <> m.username
+    )                                 AS aliases,
+    ''                                AS ad_aliases,
+    ''                                AS ext_acl,
+    m.kind                            AS kind,
+    m.multiple_bookings               AS multiple_bookings
 FROM mailbox m
-WHERE m.active = 1
+WHERE m.active=1
 
 UNION ALL
 
--- Verteilerlisten (Aliase mit mehreren Empfängern)
+-- Aliase (sichtbar, keine Verteiler)
 SELECT
     a.address                         AS c_uid,
+    a.domain                          AS domain,
     a.address                         AS c_name,
-    CONCAT(
-        a.address,
-        ' (Verteiler, ',
-        LENGTH(a.goto) - LENGTH(REPLACE(a.goto, ',', '')) + 1,
-        ' Empfaenger)'
-    )                                 AS c_cn,
-    NULL                              AS givenname,
-    NULL                              AS sn,
+    ''                                AS c_password,
+    a.address                         AS c_cn,
+    NULL                              AS c_l,
+    NULL                              AS c_o,
+    NULL                              AS c_ou,
+    NULL                              AS c_telephonenumber,
     a.address                         AS mail,
-    NULL                              AS telephonenumber,
-    NULL                              AS mobile,
-    NULL                              AS homephone,
-    NULL                              AS street,
-    NULL                              AS l,
-    NULL                              AS postalcode,
-    NULL                              AS o,
-    NULL                              AS title,
-    NULL                              AS url,
-    NULL                              AS note,
-    a.modified                        AS updated_at
+    NULL                              AS aliases,
+    ''                                AS ad_aliases,
+    ''                                AS ext_acl,
+    ''                                AS kind,
+    -1                                AS multiple_bookings
 FROM alias a
-WHERE a.active = 1
-  AND a.goto LIKE '%,%';
+LEFT JOIN mailbox m ON a.goto = m.username
+WHERE a.active=1
+  AND a.sogo_visible=1
+  AND (m.username IS NULL OR a.goto <> m.username)
+
+UNION ALL
+
+-- Verteiler (immer unsichtbar, sogo_visible=0)
+SELECT
+    a.address                         AS c_uid,
+    a.domain                          AS domain,
+    a.address                         AS c_name,
+    ''                                AS c_password,
+    COALESCE(
+        NULLIF(a.private_comment, ''),
+        CONCAT(
+            a.address,
+            ' (Verteiler, ',
+            LENGTH(a.goto) - LENGTH(REPLACE(a.goto, ',', '')) + 1,
+            ' Empfaenger)'
+        )
+    )                                 AS c_cn,
+    NULL                              AS c_l,
+    NULL                              AS c_o,
+    NULL                              AS c_ou,
+    NULL                              AS c_telephonenumber,
+    a.address                         AS mail,
+    NULL                              AS aliases,
+    ''                                AS ad_aliases,
+    ''                                AS ext_acl,
+    ''                                AS kind,
+    -1                                AS multiple_bookings
+FROM alias a
+WHERE a.active=1
+  AND a.sogo_visible=0;
 EOSQL
     
     if [ $? -eq 0 ]; then
@@ -380,8 +391,8 @@ services:
       - 8443:443
   sogo-mailcow:
     volumes:
-      - ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
-      - ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
+      #- ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
+      #- ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
 
 volumes:
   vmail-vol-1:
