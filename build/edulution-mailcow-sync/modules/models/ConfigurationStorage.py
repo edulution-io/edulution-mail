@@ -32,6 +32,9 @@ class ConfigurationStorage:
 
         self.MAILCOW_PATH = os.environ.get("MAILCOW_PATH", "/srv/docker/edulution-mail")
 
+        self.IGNORE_MAILBOXES = os.environ.get("IGNORE_MAILBOXES", "")
+        self.IGNORE_MAILBOXES = self.IGNORE_MAILBOXES.split(",") if "," in self.IGNORE_MAILBOXES else [ self.IGNORE_MAILBOXES ]
+
         if not self.KEYCLOAK_SECRET_KEY:
             logging.error("!!! ERROR !!!")
             logging.error("Environment variables for mailcow or keycloak are not set! Please refere the documentation!")
@@ -50,6 +53,7 @@ class ConfigurationStorage:
         - SOFT_DELETE_GRACE_PERIOD
         - SOFT_DELETE_MARK_COUNT
         - PERMANENT_DELETE_ENABLED
+        - IGNORE_MAILBOXES
         """
 
         OVERRIDE_FILE = os.environ.get("MAILCOW_PATH", "/srv/docker/edulution-mail") + "/mail.override.config"
@@ -102,6 +106,12 @@ class ConfigurationStorage:
             if "PERMANENT_DELETE_ENABLED" in override_config:
                 logging.info(f"* OVERRIDE PERMANENT_DELETE_ENABLED: {self.PERMANENT_DELETE_ENABLED} with {override_config['PERMANENT_DELETE_ENABLED']}")
                 self.PERMANENT_DELETE_ENABLED = int(override_config["PERMANENT_DELETE_ENABLED"])
+
+            if "IGNORE_MAILBOXES" in override_config:
+                new_ignore_mailboxes = override_config["IGNORE_MAILBOXES"]
+                new_ignore_mailboxes = new_ignore_mailboxes.split(",") if "," in new_ignore_mailboxes else [ new_ignore_mailboxes ]
+                logging.info(f"* OVERRIDE IGNORE_MAILBOXES: {self.IGNORE_MAILBOXES} with {new_ignore_mailboxes}")
+                self.IGNORE_MAILBOXES = new_ignore_mailboxes
 
             logging.info("==========================================================")
             
