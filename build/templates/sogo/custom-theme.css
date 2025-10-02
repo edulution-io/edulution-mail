@@ -75,6 +75,13 @@
     --dark-muted-dialog: #1e293b;
 }
 
+
+@media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
+  .md-toolbar-tools {
+    margin-right: 50px !important;
+  }
+}
+
 md-dialog[ui-view=maileditor].sg-mail-editor[flex="100"] {
     height: 100vw;
 }
