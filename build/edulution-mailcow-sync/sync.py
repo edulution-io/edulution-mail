@@ -95,6 +95,12 @@ class EdulutionMailcowSync:
                 continue
             
             mail = user["email"]
+            
+            # Skip ignored mailboxes
+            if mail in self._config.IGNORE_MAILBOXES:
+                logging.debug(f"  * Skipping ignored mailbox: {mail}")
+                continue
+            
             maildomain = mail.split("@")[-1]
 
             if self.keycloak.checkGroupMembershipForUser(user["id"], self._config.GROUPS_TO_SYNC):
@@ -121,7 +127,9 @@ class EdulutionMailcowSync:
                     if "email" not in member:
                         logging.error(f"    -> Member {member['id']} ({member.get('username', 'n/a')}) has not email attribute!")
                         continue
-                    membermails.append(member["email"])
+                    # Skip ignored mailboxes from group membership
+                    if member["email"] not in self._config.IGNORE_MAILBOXES:
+                        membermails.append(member["email"])
 
             if not self._addDomain(maildomain, domainList):
                 continue
@@ -232,7 +240,12 @@ class EdulutionMailcowSync:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
                 
                 if username:
-                    # Mark for deactivation (will only deactivate after 3 marks)
+                    # Skip ignored mailboxes
+                    if username in self._config.IGNORE_MAILBOXES:
+                        logging.debug(f"  * Skipping ignored mailbox from deletion: {username}")
+                        continue
+                    
+                    # Mark for deactivation (will only deactivate after threshold marks)
                     if self.deactivationTracker.markForDeactivation("mailboxes", username, grace_period):
                         # Third mark reached - actually deactivate
                         # Extract local_part and domain for the update
@@ -266,6 +279,9 @@ class EdulutionMailcowSync:
             # Check for items to permanently delete (if enabled)
             if self._config.PERMANENT_DELETE_ENABLED:
                 for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
+                    # Skip ignored mailboxes from permanent deletion
+                    if mailbox_id in self._config.IGNORE_MAILBOXES:
+                        continue
                     if self.mailcow.deleteMailbox(mailbox_id):
                         self.deactivationTracker.removeDeleted("mailboxes", mailbox_id)
                         logging.info(f"  * Permanently deleted mailbox {mailbox_id}")
@@ -309,6 +325,10 @@ class EdulutionMailcowSync:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
                 
                 if username:
+                    # Skip ignored mailboxes
+                    if username in self._config.IGNORE_MAILBOXES:
+                        logging.debug(f"  * Skipping ignored mailbox from deletion: {username}")
+                        continue
                     self.mailcow.deleteMailbox(username)
                     logging.info(f"  * Deleted mailbox {username}")
             
