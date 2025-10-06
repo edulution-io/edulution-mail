@@ -335,31 +335,166 @@ init_mailcow() {
     log_success "Mailcow initialized"
 }
 
-# Ensure SOGo theme files exist
+# Extract @tag (e.g. theme/version) from the first /* ... */ block near the top.
+get_css_tag() {
+  local file="$1" tag="$2"
+  [ -f "$file" ] || return 1
+
+  tag=${tag#@}
+  tag=$(printf '%s' "$tag" | tr '[:upper:]' '[:lower:]')
+
+  sed -n '1,500p' "$file" \
+    | tr -d '\r' \
+    | sed -n '/\/\*/,/\*\//p' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -n "s/.*@${tag}[[:space:]]*:*[[:space:]]*\([^[:space:]*][^[:space:]*]*\).*/\1/p" \
+    | head -n1
+}
+
+debug_css_header() {
+  local file="$1"
+  local t v
+  t="$(get_css_tag "$file" "theme"    || echo "")"
+  v="$(get_css_tag "$file" "version"  || echo "")"
+  log_info "Parsed header from $(basename "$file"): theme='${t:-<none>}' version='${v:-<none>}'"
+}
+
+# Compare two semver strings A vs B.
+# Returns 0 if A > B (greater), 1 otherwise.
+semver_gt() {
+  # Normalize: missing -> 0.0.0
+  local A="${1:-0.0.0}" B="${2:-0.0.0}"
+  IFS='.' read -r a1 a2 a3 <<<"$A"
+  IFS='.' read -r b1 b2 b3 <<<"$B"
+  a1=${a1:-0}; a2=${a2:-0}; a3=${a3:-0}
+  b1=${b1:-0}; b2=${b2:-0}; b3=${b3:-0}
+  # numeric compare
+  ((a1 > b1)) && return 0
+  ((a1 < b1)) && return 1
+  ((a2 > b2)) && return 0
+  ((a2 < b2)) && return 1
+  ((a3 > b3)) && return 0
+  ((a3 < b3)) && return 1
+  return 1
+}
+
+# Equality helper (A == B)
+semver_eq() {
+  local A="${1:-0.0.0}" B="${2:-0.0.0}"
+  IFS='.' read -r a1 a2 a3 <<<"$A"
+  IFS='.' read -r b1 b2 b3 <<<"$B"
+  a1=${a1:-0}; a2=${a2:-0}; a3=${a3:-0}
+  b1=${b1:-0}; b2=${b2:-0}; b3=${b3:-0}
+  [[ "$a1" = "$b1" && "$a2" = "$b2" && "$a3" = "$b3" ]]
+}
+
+# Copy if source is newer than current (by semver); if current missing, copy.
+install_css_if_newer() {
+  local src="$1" dst="$2" label="$3"
+
+  local src_theme src_ver cur_theme cur_ver
+  src_theme="$(get_css_tag "$src" "theme"   || true)"
+  src_ver="$(get_css_tag "$src" "version"   || true)"
+
+  if [ -f "$dst" ]; then
+    cur_theme="$(get_css_tag "$dst" "theme"   || true)"
+    cur_ver="$(get_css_tag "$dst" "version"   || true)"
+  fi
+
+  # Normalize defaults for decision making
+  cur_theme="${cur_theme:-edulution-dark}"
+  cur_ver="${cur_ver:-0.0.0}"
+
+  log_info "Installed theme: ${cur_theme} v${cur_ver} | Candidate ($label): ${src_theme:-<none>} v${src_ver:-<none>}"
+
+  # Only update if SAME theme AND source version is greater
+  if [[ "$src_theme" = "$cur_theme" ]] && semver_gt "$src_ver" "$cur_ver"; then
+    cp -f "$src" "$dst"
+    log_success "Updated ${label} theme to v${src_ver}"
+    return 0
+  fi
+
+  # If destination missing entirely, install src
+  if [ ! -f "$dst" ]; then
+    cp -f "$src" "$dst"
+    log_success "Installed ${label} theme v${src_ver}"
+    return 0
+  fi
+
+  log_info "Keeping existing ${cur_theme} v${cur_ver} (no newer $label available)"
+  return 1
+}
+
+
+# Ensure SOGo theme files exist (respect existing theme + version)
 ensure_sogo_files() {
-    log_info "Ensuring SOGo theme files"
-    
-    mkdir -p ${MAILCOW_PATH}/mailcow/data/conf/sogo/
-    
-    # Remove directories if they exist
-    [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
-    [ -d "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ] && rm -rf ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
-    
-    # Copy theme files
-    cp /templates/sogo/custom-theme.css ${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css
-    cp /templates/sogo/sogo-full.svg ${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg
-    
-    # Verify files
-    if [ ! -f "${MAILCOW_PATH}/mailcow/data/conf/sogo/custom-theme.css" ]; then
-        log_error "custom-theme.css is not a file!"
-        exit 1
-    fi
-    if [ ! -f "${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo-full.svg" ]; then
-        log_error "sogo-full.svg is not a file!"
-        exit 1
-    fi
-    
-    log_success "SOGo theme files ready"
+  log_info "Ensuring SOGo theme files (no unwanted overwrites)"
+
+  local sogo_dir="${MAILCOW_PATH}/mailcow/data/conf/sogo"
+  local target_css="${sogo_dir}/custom-theme.css"
+  local dark_src="/templates/sogo/custom-theme.css"      # dark in the image
+  local light_src="/templates/sogo/light-theme.css"      # light in the image
+  local svg_src="/templates/sogo/sogo-full.svg"
+  local target_svg="${sogo_dir}/sogo-full.svg"
+
+  mkdir -p "$sogo_dir"
+
+  # Remove directories if someone mis-mounted a dir with the same name
+  [ -d "$target_css" ] && rm -rf "$target_css"
+  [ -d "$target_svg" ] && rm -rf "$target_svg"
+
+  # Detect currently installed theme (if any). Default to dark when absent or tag missing.
+  local current_theme="" current_ver=""
+  if [ -f "$target_css" ]; then
+    current_theme="$(get_css_tag "$target_css" "theme"    || true)"
+    current_ver="$(get_css_tag "$target_css" "version"    || true)"
+    debug_css_header "$target_css"
+  fi
+
+  # Decide which source to consider based on the *actual* installed theme.
+  local chosen_src chosen_label
+  if [[ "$current_theme" =~ edulution-light ]]; then
+    chosen_src="$light_src"; chosen_label="light"
+  elif [[ "$current_theme" =~ edulution-dark ]]; then
+    chosen_src="$dark_src";  chosen_label="dark"
+  else
+    # No file or no tag: default to dark (policy), but log it
+    log_warning "No recognizable @theme in installed CSS; defaulting to dark"
+    chosen_src="$dark_src";  chosen_label="dark"
+  fi
+
+  if [ ! -f "$chosen_src" ]; then
+    log_warning "Chosen theme source ($chosen_label) missing; falling back to dark source"
+    chosen_src="$dark_src"; chosen_label="dark"
+  fi
+
+  # Try to update the matching theme **only if the same theme** and src version is greater
+  install_css_if_newer "$chosen_src" "$target_css" "$chosen_label" || true
+
+  # First install on empty systems (no target file at all)
+  if [ ! -f "$target_css" ]; then
+    log_info "No custom-theme.css present; installing default dark"
+    cp -f "$dark_src" "$target_css"
+    debug_css_header "$target_css"
+  fi
+
+
+  # Always ensure the SVG is present (copy if missing or different)
+  if [ ! -f "$target_svg" ]; then
+    cp -f "$svg_src" "$target_svg"
+  fi
+
+  # Verify files
+  if [ ! -f "$target_css" ]; then
+    log_error "custom-theme.css is not a file!"
+    exit 1
+  fi
+  if [ ! -f "$target_svg" ]; then
+    log_error "sogo-full.svg is not a file!"
+    exit 1
+  fi
+
+  log_success "SOGo theme files ready (respected active theme + version)"
 }
 
 # Apply template files
