@@ -88,3 +88,11 @@ touch /srv/docker/edulution-mail/DISABLE_SYNC
 ```
 
 The sync will check if the file exists on every run (see SYNC_INTERVAL) and skip the sync if the file exists.
+
+## Edulution themes
+
+In the repoistory are the theme files under `build/templates/sogo`.
+
+These files are use by Edulution to switch the themes in the admin settings. 
+
+In their header comment there is the theme name a version number that must be increased when changing the file's content.
