@@ -152,11 +152,6 @@ div.md-label[aria-disabled="true"] {
     opacity: 1;
 }
 
-button.md-button.sg-icon-button[ng-transclude] {
-    color: var(--dark-primary-foreground);
-    background-color: var(--dark-primary);
-}
-
 div.md-select-menu-container {
     background-color: var(--dark-overlay) !important;
     color: var(--dark-overlay-foreground) !important;
