@@ -1,9 +1,5 @@
 /* @theme edulution-dark
-<<<<<<< HEAD
-   @version 0.1.1
-=======
    @version 0.1.2
->>>>>>> 32d3db0 (33: * the height was still off, we now handle ck-focused and ck-blurred)
 */
 
 :root {
@@ -83,27 +79,13 @@
     --dark-muted-dialog: #1e293b;
 }
 
-<<<<<<< HEAD
 @media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
   .md-toolbar-tools {
     margin-right: 50px !important;
   }
 }
 
-[ui-view=maileditor] .ck-editor__editable {
-    min-height: unset;
-}
-md-dialog[ui-view=maileditor].sg-mail-editor[flex="100"] {
-    height: 100vw;
-}
-md-dialog[ui-view=maileditor].sg-mail-editor[flex="60"] {
-    height: 70vw;
-}
-
-md-dialog[ui-view=maileditor].sg-mail-editor {
-=======
 md-dialog[ui-view=maileditor] {
->>>>>>> 32d3db0 (33: * the height was still off, we now handle ck-focused and ck-blurred)
     color: var(--dark-foreground);
 
     p {
