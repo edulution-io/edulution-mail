@@ -75,10 +75,12 @@
     --dark-muted-dialog: #1e293b;
 }
 
+[ui-view=maileditor] .ck-editor__editable {
+    min-height: unset;
+}
 md-dialog[ui-view=maileditor].sg-mail-editor[flex="100"] {
     height: 100vw;
 }
-
 md-dialog[ui-view=maileditor].sg-mail-editor[flex="60"] {
     height: 70vw;
 }
@@ -87,6 +89,11 @@ md-dialog[ui-view=maileditor].sg-mail-editor {
     color: var(--dark-foreground);
     p {
         color: var(--dark-foreground);
+    }
+
+    button.md-button.sg-icon-button[ng-transclude][ng-click="editor.hideCc = false"],
+    button.md-button.sg-icon-button[ng-transclude][ng-click="editor.hideBcc = false"] {
+        color: var(--dark-secondary);
     }
 
     form.ng-pristine {
@@ -103,17 +110,17 @@ md-dialog[ui-view=maileditor].sg-mail-editor {
                     background-color: var(--dark-background);
 
                     div.ck-editor {
-                        min-height: 300px;
+                        min-height: unset;
                         height: 100%;
                         max-height: 100%;
 
                         .ck-editor__main {
-                            min-height: 300px;
+                            min-height: unset;
                             height: 100%;
                             max-height: 100%;
 
                             div.ck-content.ck-editor__editable.ck-editor__editable_inline {
-                                min-height: 300px;
+                                min-height: unset;
                                 height: 100%;
                             }
                         }
@@ -143,6 +150,11 @@ div.md-label[disabled="disabled"],
 div.md-label[aria-disabled="true"] {
     color: var(--dark-muted-foreground);
     opacity: 1;
+}
+
+button.md-button.sg-icon-button[ng-transclude] {
+    color: var(--dark-primary-foreground);
+    background-color: var(--dark-primary);
 }
 
 div.md-select-menu-container {
