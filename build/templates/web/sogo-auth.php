@@ -99,7 +99,9 @@ elseif (isset($_SERVER['HTTP_X_ORIGINAL_URI']) && strcasecmp(substr($_SERVER['HT
 }
 // check for token-login via edulution-ui
 elseif (isset($_GET['token']) || isset($_SERVER['HTTP_AUTHORIZATION'])) {
+  session_start();
   if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
     if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
       $token = $matches[1];
     }
@@ -115,21 +117,41 @@ elseif (isset($_GET['token']) || isset($_SERVER['HTTP_AUTHORIZATION'])) {
   
   // load prerequisites only when required
   require_once $_SERVER['DOCUMENT_ROOT'] . '/inc/prerequisites.inc.php';
-  $user = file_get_contents("http://edulution-mail:5000/token/".$token);
-  if ($response !== false) {
-    $login = json_decode($user, true);
+  $response = @file_get_contents("http://edulution-mail:5000/token/".$token);
+  if ($response !== false && !empty($response)) {
+    // The API returns the email address as a JSON string
+    $login = json_decode($response, true);
+    
+    // Ensure the email is valid
+    if (!filter_var($login, FILTER_VALIDATE_EMAIL)) {
+      header('HTTP/1.0 403 Forbidden');
+      echo "Invalid email format from token";
+      exit;
+    }
+    
     // load master password
     $sogo_sso_pass = file_get_contents("/etc/sogo-sso/sogo-sso.pass");
+    
+    // Initialize session array if not exists
+    if (!isset($_SESSION[$session_var_user_allowed])) {
+      $_SESSION[$session_var_user_allowed] = array();
+    }
+    
     // register username and password in session
     $_SESSION[$session_var_user_allowed][] = $login;
     $_SESSION[$session_var_pass] = $sogo_sso_pass;
+    
+    // Also store the current user as mailcow_cc_username for compatibility
+    $_SESSION['mailcow_cc_username'] = $login;
+    $_SESSION['mailcow_cc_role'] = 'user';
+    
     // update sasl logs
-    $service = ($app_passwd_data['eas'] === true) ? 'EAS' : 'DAV';
     $stmt = $pdo->prepare("REPLACE INTO sasl_log (`service`, `app_password`, `username`, `real_rip`) VALUES ('SSO', 0, :username, :remote_addr)");
     $stmt->execute(array(
       ':username' => $login,
       ':remote_addr' => ($_SERVER['HTTP_X_REAL_IP'] ?? $_SERVER['REMOTE_ADDR'])
     ));
+    
     // redirect to sogo (sogo will get the correct credentials via nginx auth_request
     header("Location: /SOGo/so/{$login}");
     exit;

@@ -12,6 +12,16 @@ via EdulutionUI
 
 Synchronization takes place at definable intervals. The interval can be set using the environment variable "SYNC_INTERVAL". All new domains, users and groups are created, edited, deactivated or deleted.
 
+#### Soft Delete Feature
+
+The soft delete feature provides a safety mechanism for handling removed domains and mailboxes:
+- When items are no longer found in Keycloak, they are first deactivated rather than immediately deleted
+- A deletion date is added to the item's description in Mailcow (e.g., "[DEACTIVATED - DELETE AT: 2024-02-01 15:30:00]")
+- After a configurable grace period (default: 30 days), deactivated items are permanently deleted
+- Items that reappear in Keycloak during the grace period are automatically reactivated
+- Aliases and filters are deleted immediately without a grace period
+- The feature can be disabled by setting `SOFT_DELETE_ENABLED=0`
+
 ### Login
 
 The login with IMAP, POP3 and SMTP takes place in the dovecot container via a LUA script. The script "edulution-sso.lua" is now integrated here, which forwards every login attempt to the Edulution Mail API, which in turn attempts a login via Keycloak or LDAP.
@@ -27,6 +37,8 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 | GROUPS_TO_SYNC                 | No                | role-schooladministrator,role-teacher,role-student | A comma seperated list of groups of which the users will be synced
 | ENABLE_GAL                     | No                | 1 (YES)                                            | Enable (1) or disable (0) the GAL (Global Address List) |
 | SYNC_INTERVAL                  | No                | 300                                                | (seconds) The sync interval for user and groups |
+| SOFT_DELETE_ENABLED            | No                | 1 (YES)                                            | Enable (1) or disable (0) soft deletion for domains and mailboxes |
+| SOFT_DELETE_GRACE_PERIOD       | No                | 2592000                                            | (seconds) Grace period before permanent deletion (default: 30 days) |
 | KEYCLOAK_SERVER_URL            | No                | https://edulution-traefik/auth/                    | The default keycloak server (edulution) |
 | MAILCOW_TZ                     | No                | Europe/Berlin                                      | Mailcow timezone |
 | MAILCOW_API_TOKEN              | No                | <will be generated>                                | Define an api token to use. Schould be somthing like aaaaa-bbbbb-ccccc-ddddd-eeeee |
@@ -76,3 +88,11 @@ touch /srv/docker/edulution-mail/DISABLE_SYNC
 ```
 
 The sync will check if the file exists on every run (see SYNC_INTERVAL) and skip the sync if the file exists.
+
+## Edulution themes
+
+In the repoistory are the theme files under `build/templates/sogo`.
+
+These files are use by Edulution to switch the themes in the admin settings. 
+
+In their header comment there is the theme name a version number that must be increased when changing the file's content.

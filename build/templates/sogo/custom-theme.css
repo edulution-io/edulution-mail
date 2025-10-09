@@ -1,3 +1,7 @@
+/* @theme edulution-dark
+   @version 0.1.1
+*/
+
 :root {
     --sidebar-width: 66px;
     --radius: 0.25rem;
@@ -73,6 +77,12 @@
     --dark-overlay-transparent: #1e293850;
     --dark-overlay-foreground: #ffffff;
     --dark-muted-dialog: #1e293b;
+}
+
+@media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
+  .md-toolbar-tools {
+    margin-right: 50px !important;
+  }
 }
 
 [ui-view=maileditor] .ck-editor__editable {

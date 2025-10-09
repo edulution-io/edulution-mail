@@ -109,3 +109,26 @@ class Mailcow:
         logging.info(f"  * Edit filters {filter['attr']['username']} on mailcow...")
         requestQuery = "/api/v1/edit/filter"
         return self._postRequest(requestQuery, filter)
+    
+    # ========================================================================================
+    # Delete functions for cleanup
+    
+    def deleteDomain(self, domain: str) -> bool:
+        logging.info(f"  * Deleting domain {domain} from mailcow...")
+        requestQuery = "/api/v1/delete/domain"
+        return self._postRequest(requestQuery, [domain])
+    
+    def deleteMailbox(self, mailbox: str) -> bool:
+        logging.info(f"  * Deleting mailbox {mailbox} from mailcow...")
+        requestQuery = "/api/v1/delete/mailbox"
+        return self._postRequest(requestQuery, [mailbox])
+    
+    def deleteAlias(self, alias_id: str) -> bool:
+        logging.info(f"  * Deleting alias {alias_id} from mailcow...")
+        requestQuery = "/api/v1/delete/alias"
+        return self._postRequest(requestQuery, [alias_id])
+    
+    def deleteFilter(self, filter_id: str) -> bool:
+        logging.info(f"  * Deleting filter {filter_id} from mailcow...")
+        requestQuery = "/api/v1/delete/filter"
+        return self._postRequest(requestQuery, [filter_id])

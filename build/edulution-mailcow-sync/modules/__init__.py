@@ -6,3 +6,4 @@ from .models.ListStorage import ListStorage
 from .models.ConfigurationStorage import ConfigurationStorage
 from .models.AliasListStorage import AliasListStorage
 from .models.FilterListStorage import FilterListStorage
+from .database.DeactivationTracker import DeactivationTracker

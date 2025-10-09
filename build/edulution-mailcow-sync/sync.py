@@ -6,7 +6,7 @@ import time
 import logging
 import os
 
-from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage
+from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage, DeactivationTracker
 
 logging.basicConfig(format='%(levelname)s: %(asctime)s %(message)s', level=logging.INFO)
 
@@ -17,24 +17,39 @@ class EdulutionMailcowSync:
 
         self.keycloak = Keycloak(server_url=self._config.KEYCLOAK_SERVER_URL, client_id=self._config.KEYCLOAK_CLIENT_ID, client_secret_key=self._config.KEYCLOAK_SECRET_KEY)
         self.mailcow = Mailcow(apiToken=self._config.MAILCOW_API_TOKEN)
+        self.deactivationTracker = DeactivationTracker(
+            storage_path=self._config.MAILCOW_PATH + "/data",
+            mark_count_threshold=self._config.SOFT_DELETE_MARK_COUNT
+        )
 
         self.keycloak.initKeycloakAdmin()
 
     def start(self):
         logging.info("===== Edulution-Mailcow-Sync =====")
         while True:
-            if not self._sync():
-                logging.error("!!! Sync failed, see above errors !!!")
-                exit(1)
-            else:
-                logging.info("=== Sync finished successfully ===")
-                logging.info("")
-                logging.info(f"=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===")
-                logging.info("")
-                time.sleep(self._config.SYNC_INTERVAL)
+            try:
+                if not self._sync():
+                    logging.error("!!! Sync failed, see above errors !!!")
+                    # Don't exit on sync failure, wait and retry
+                    logging.info(f"=== Retrying in {self._config.RETRY_INTERVAL} seconds ===")
+                    time.sleep(self._config.RETRY_INTERVAL)
+                else:
+                    logging.info("=== Sync finished successfully ===")
+                    logging.info("")
+                    logging.info(f"=== Waiting {self._config.SYNC_INTERVAL} seconds before next sync ===")
+                    logging.info("")
+                    time.sleep(self._config.SYNC_INTERVAL)
+            except KeyboardInterrupt:
+                logging.info("Sync interrupted by user")
+                break
+            except Exception as e:
+                logging.exception(f"Unexpected error during sync: {e}")
+                logging.info(f"=== Retrying in {self._config.RETRY_INTERVAL} seconds ===")
+                time.sleep(self._config.RETRY_INTERVAL)
 
     def _sync(self) -> bool:
         logging.info("=== Starting Edulution-Mailcow-Sync ===")
+        logging.info("")
 
         if os.path.exists(self._config.MAILCOW_PATH + "/DISABLE_SYNC"):
             logging.info("")
@@ -51,6 +66,7 @@ class EdulutionMailcowSync:
 
         logging.info("* 1. Loading data from mailcow and keycloak")
 
+        # Load Mailcow data with retry logic
         try:
             domainList.loadRawData(self.mailcow.getDomains())
             mailboxList.loadRawData(self.mailcow.getMailboxes())
@@ -61,16 +77,30 @@ class EdulutionMailcowSync:
             return False
         
         try:
-            users = self.keycloak.getUsers()
+            users = self.keycloak.getUsers()                    
+        except Exception as e:
+            logging.exception(f"Failed to load user from keycloak: {e}")
+            return False  # Users are essential, fail completely
+        
+        try:
             groups = self.keycloak.getGroups()
         except Exception as e:
-            logging.error(f"Failed to load data from keycloak: {e}")
-            return False
+            logging.exception(f"Failed to load groups from keycloak: {e}")
+            return False  # Groups are essential, fail completely
 
         logging.info("* 2. Calculation deltas between keycloak and mailcow")
 
         for user in users:
+            if "email" not in user:
+                continue
+            
             mail = user["email"]
+            
+            # Skip ignored mailboxes
+            if mail in self._config.IGNORE_MAILBOXES:
+                logging.debug(f"  * Skipping ignored mailbox: {mail}")
+                continue
+            
             maildomain = mail.split("@")[-1]
 
             if self.keycloak.checkGroupMembershipForUser(user["id"], self._config.GROUPS_TO_SYNC):
@@ -83,32 +113,33 @@ class EdulutionMailcowSync:
         for group in groups:
             mail = group["attributes"]["mail"][0]
             maildomain = mail.split("@")[-1]
+
+            description = mail
+            if "description" in group["attributes"]:
+                description = group["attributes"]["description"][0]
             
             membermails = []
             for member in group["members"]:
+                if "id" not in member:
+                    logging.warning(f"    -> Member {member} without ID in group {mail}, skipping!")
+                    continue
                 if self.keycloak.checkGroupMembershipForUser(member["id"], self._config.GROUPS_TO_SYNC):
-                    if "email"  not in member:
+                    if "email" not in member:
                         logging.error(f"    -> Member {member['id']} ({member.get('username', 'n/a')}) has not email attribute!")
                         continue
-                    membermails.append(member["email"])
+                    # Skip ignored mailboxes from group membership
+                    if member["email"] not in self._config.IGNORE_MAILBOXES:
+                        membermails.append(member["email"])
 
             if not self._addDomain(maildomain, domainList):
                 continue
 
-            # self._addMailbox({
-            #     "email": mail,
-            #     "firstName": group["name"],
-            #     "lastName": "(list)",
-            #     "attributes": {
-            #         "sophomorixMailQuotaCalculated": [ 1 ],
-            #         "sophomorixStatus": "G"
-            #     }
-            # }, mailboxList)
+            if len(membermails) == 0:
+                logging.debug(f"    -> Mailinglist {mail} has no members, skipping!")
+                continue
 
-            self._addAlias(mail, membermails, aliasList)
+            self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
-
-            # self._addListFilter(mail, membermails, filterList)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
             logging.info("  * Everything is up-to-date!")
@@ -121,16 +152,8 @@ class EdulutionMailcowSync:
 
         logging.info("* 3. Syncing deltas to mailcow")
 
-        # 1. Delete items
-
-        # self.mailcow.killElementsOfType(
-        #     "filter", mailcowFilters.killQueue())
-        # self.mailcow.killElementsOfType(
-        #     "alias", mailcowAliases.killQueue())
-        # self.mailcow.killElementsOfType(
-        #     "mailbox", mailcowMailboxes.killQueue())
-        # self.mailcow.killElementsOfType(
-        #     "domain", mailcowDomains.killQueue())
+        # 1. Process deactivations and deletions
+        self._processDeactivationsAndDeletions(domainList, mailboxList, aliasList, filterList)
 
         # 2. Domain(s) add and update
 
@@ -185,6 +208,136 @@ class EdulutionMailcowSync:
             "gal": self._config.ENABLE_GAL
         }, domainName)
     
+    def _processDeactivationsAndDeletions(self, domainList: DomainListStorage, mailboxList: MailboxListStorage, aliasList: AliasListStorage, filterList: FilterListStorage):
+        grace_period = self._config.SOFT_DELETE_GRACE_PERIOD
+        soft_delete_enabled = self._config.SOFT_DELETE_ENABLED
+        
+        # Process deletions for filters (always immediate)
+        for filter in filterList.disableQueue():
+            filter_id = filter.get('id')
+            if filter_id:
+                self.mailcow.deleteFilter(filter_id)
+                logging.info(f"  * Deleted filter {filter_id}")
+        
+        if soft_delete_enabled:
+            # Process deactivations for aliases with mark counting
+            for alias in aliasList.disableQueue():
+                alias_id = alias.get('id') or alias.get('address')
+                if alias_id:
+                    # Mark for deactivation (will only delete after threshold marks)
+                    if self.deactivationTracker.markForDeactivation("aliases", alias_id, grace_period):
+                        # Threshold reached - actually delete
+                        self.mailcow.deleteAlias(alias_id)
+                        logging.info(f"  * Deleted alias {alias_id} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+            
+            # Process deactivations for mailboxes - with missing count check
+            for mailbox in mailboxList.disableQueue():
+                # Get username from mailbox data
+                username = None
+                if 'username' in mailbox:
+                    username = mailbox['username']
+                elif 'local_part' in mailbox and 'domain' in mailbox:
+                    username = mailbox['local_part'] + '@' + mailbox['domain']
+                
+                if username:
+                    # Skip ignored mailboxes
+                    if username in self._config.IGNORE_MAILBOXES:
+                        logging.debug(f"  * Skipping ignored mailbox from deletion: {username}")
+                        continue
+                    
+                    # Mark for deactivation (will only deactivate after threshold marks)
+                    if self.deactivationTracker.markForDeactivation("mailboxes", username, grace_period):
+                        # Third mark reached - actually deactivate
+                        # Extract local_part and domain for the update
+                        local_part, domain = username.split('@')
+                        self.mailcow.updateMailbox({
+                            "attr": {
+                                "active": 0,
+                                "local_part": local_part,
+                                "domain": domain
+                            },
+                            "items": [username]
+                        })
+                        logging.info(f"  * Deactivated mailbox {username} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+            
+            # Process deactivations for domains
+            for domain in domainList.disableQueue():
+                domain_name = domain.get('domain_name')
+                if domain_name:
+                    # Mark for deactivation (will only deactivate after 3 marks)
+                    if self.deactivationTracker.markForDeactivation("domains", domain_name, grace_period):
+                        # Third mark reached - actually deactivate
+                        self.mailcow.updateDomain({
+                            "attr": {
+                                "active": 0,
+                                "domain": domain_name
+                            },
+                            "items": [domain_name]
+                        })
+                        logging.info(f"  * Deactivated domain {domain_name} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+            
+            # Check for items to permanently delete (if enabled)
+            if self._config.PERMANENT_DELETE_ENABLED:
+                for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
+                    # Skip ignored mailboxes from permanent deletion
+                    if mailbox_id in self._config.IGNORE_MAILBOXES:
+                        continue
+                    if self.mailcow.deleteMailbox(mailbox_id):
+                        self.deactivationTracker.removeDeleted("mailboxes", mailbox_id)
+                        logging.info(f"  * Permanently deleted mailbox {mailbox_id}")
+                
+                for domain_id in self.deactivationTracker.getItemsToDelete("domains"):
+                    if self.mailcow.deleteDomain(domain_id):
+                        self.deactivationTracker.removeDeleted("domains", domain_id)
+                        logging.info(f"  * Permanently deleted domain {domain_id}")
+                
+                # Also check for aliases to permanently delete
+                for alias_id in self.deactivationTracker.getItemsToDelete("aliases"):
+                    self.deactivationTracker.removeDeleted("aliases", alias_id)
+                    # Aliases are already deleted when deactivated, just clean up tracker
+            
+            # Reactivate items that reappeared in Keycloak
+            for mailbox in mailboxList.addQueue() + mailboxList.updateQueue():
+                username = mailbox.get('local_part') + '@' + mailbox.get('domain') if 'local_part' in mailbox else mailbox.get('attr', {}).get('local_part') + '@' + mailbox.get('attr', {}).get('domain')
+                if username and self.deactivationTracker.isMarkedForDeactivation("mailboxes", username):
+                    self.deactivationTracker.reactivate("mailboxes", username)
+                    logging.info(f"  * Reactivated mailbox {username} (found in Keycloak again)")
+            
+            for domain in domainList.addQueue() + domainList.updateQueue():
+                domain_name = domain.get('domain') if 'domain' in domain else domain.get('attr', {}).get('domain')
+                if domain_name and self.deactivationTracker.isMarkedForDeactivation("domains", domain_name):
+                    self.deactivationTracker.reactivate("domains", domain_name)
+                    logging.info(f"  * Reactivated domain {domain_name} (found in Keycloak again)")
+        else:
+            # Soft delete disabled - immediate deletion
+            for alias in aliasList.disableQueue():
+                alias_id = alias.get('id') or alias.get('address')
+                if alias_id:
+                    self.mailcow.deleteAlias(alias_id)
+                    logging.info(f"  * Deleted alias {alias_id}")
+            
+            for mailbox in mailboxList.disableQueue():
+                # Get username from mailbox data
+                username = None
+                if 'username' in mailbox:
+                    username = mailbox['username']
+                elif 'local_part' in mailbox and 'domain' in mailbox:
+                    username = mailbox['local_part'] + '@' + mailbox['domain']
+                
+                if username:
+                    # Skip ignored mailboxes
+                    if username in self._config.IGNORE_MAILBOXES:
+                        logging.debug(f"  * Skipping ignored mailbox from deletion: {username}")
+                        continue
+                    self.mailcow.deleteMailbox(username)
+                    logging.info(f"  * Deleted mailbox {username}")
+            
+            for domain in domainList.disableQueue():
+                domain_name = domain.get('domain_name')
+                if domain_name:
+                    self.mailcow.deleteDomain(domain_name)
+                    logging.info(f"  * Deleted domain {domain_name}")
+    
     def _addMailbox(self, user: dict, mailboxList: MailboxListStorage) -> bool:
         mail = user["email"]
         domain = mail.split("@")[-1]
@@ -220,13 +373,14 @@ class EdulutionMailcowSync:
 
         return True
 
-    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage) -> bool:
+    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1, alias_description: str = "") -> bool:
         goto_targets = ",".join(goto) if isinstance(goto, list) else goto
         return aliasList.addElement({
             "address": alias,
             "goto": goto_targets,
             "active": 1,
-            "sogo_visible": 1
+            "sogo_visible": sogo_visible,
+            "private_comment": alias_description
         }, alias)
 
     # def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):
