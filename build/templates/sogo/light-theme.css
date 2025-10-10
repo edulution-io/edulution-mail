@@ -21,8 +21,62 @@
 
  /** EDULUTION custom */
 
- @media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
+@media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
   .md-toolbar-tools {
     margin-right: 50px !important;
   }
+}
+
+md-fab-speed-dial {
+    md-fab-actions {
+        button.md-button.md-fab[ng-click="mailbox.newMessage($event, true)"] {
+            width: 0px;
+            height: 0px;
+            display: none;
+            opacity: 0;
+            
+        }
+    }
+}
+
+md-dialog[ui-view=maileditor] {
+    .sg-mail-editor[flex="60"] {
+        height: 70vh;
+        max-height: 70vh;
+    }
+
+    .sg-mail-editor[flex="100"] {
+        height: 100vh;
+        max-height: 100vh;
+    }
+
+    div.ck-color-selector {
+        .ck-color-grid__label {
+            transform: translate(8px, -1px);
+        }
+    }
+
+    form {
+        @media (min-width: 0px) and (max-width: 767px) and (orientation: portrait) {
+            md-toolbar {
+                padding-right: 50px !important;
+            }
+        }
+
+        md-dialog-content {
+            md-input-container {
+                sg-ckeditor {
+                    div.ck-editor {
+                        div.ck-editor__main {
+                            div.ck-blurred,
+                            div.ck-focused {
+                                min-height: calc(100vh - 324px) !important;
+                                height: 100%;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
