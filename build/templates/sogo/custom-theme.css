@@ -1,5 +1,5 @@
 /* @theme edulution-dark
-   @version 0.1.1
+   @version 0.1.2
 */
 
 :root {
@@ -79,52 +79,43 @@
     --dark-muted-dialog: #1e293b;
 }
 
-
 @media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
   .md-toolbar-tools {
     margin-right: 50px !important;
   }
 }
 
-md-dialog[ui-view=maileditor].sg-mail-editor[flex="100"] {
-    height: 100vw;
-}
-
-md-dialog[ui-view=maileditor].sg-mail-editor[flex="60"] {
-    height: 70vw;
-}
-
-md-dialog[ui-view=maileditor].sg-mail-editor {
+md-dialog[ui-view=maileditor] {
     color: var(--dark-foreground);
+
     p {
         color: var(--dark-foreground);
     }
 
-    form.ng-pristine {
-        height: 100%;
+    .sg-mail-editor[flex="60"] {
+        height: 70vh;
+        max-height: 70vh;
+    }
 
+    .sg-mail-editor[flex="100"] {
+        height: 100vh;
+        max-height: 100vh;
+    }
+
+    button.md-button.sg-icon-button[ng-transclude][ng-click="editor.hideCc = false"],
+    button.md-button.sg-icon-button[ng-transclude][ng-click="editor.hideBcc = false"] {
+        color: var(--dark-secondary);
+    }
+
+    form {
         md-dialog-content {
-            height: 100%;
-
-            md-input-container.sg-mail-editor-content {
-                height: calc(100% - 190px);
-
+            md-input-container {
                 sg-ckeditor {
-                    height: 100%;
-                    background-color: var(--dark-background);
-
                     div.ck-editor {
-                        min-height: 300px;
-                        height: 100%;
-                        max-height: 100%;
-
-                        .ck-editor__main {
-                            min-height: 300px;
-                            height: 100%;
-                            max-height: 100%;
-
-                            div.ck-content.ck-editor__editable.ck-editor__editable_inline {
-                                min-height: 300px;
+                        div.ck-editor__main {
+                            div.ck-blurred,
+                            div.ck-focused {
+                                min-height: calc(100vh - 324px) !important;
                                 height: 100%;
                             }
                         }
