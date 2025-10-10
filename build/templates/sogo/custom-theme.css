@@ -1,5 +1,5 @@
 /* @theme edulution-dark
-   @version 0.1.2
+   @version 0.1.3
 */
 
 :root {
@@ -105,6 +105,13 @@ md-dialog[ui-view=maileditor] {
     button.md-button.sg-icon-button[ng-transclude][ng-click="editor.hideCc = false"],
     button.md-button.sg-icon-button[ng-transclude][ng-click="editor.hideBcc = false"] {
         color: var(--dark-secondary);
+    }
+
+    div.ck-color-selector {
+        .ck-color-grid__label {
+            color: var(--dark-foreground) !important;
+            transform: translate(8px, -1px);
+        }
     }
 
     form {
