@@ -503,6 +503,87 @@ ensure_sogo_files() {
   log_success "SOGo theme files ready (respected active theme + version)"
 }
 
+# Replace Mailcow's SOGo container with our custom one
+use_custom_sogo_image() {
+    log_step "Replacing SOGo with custom image"
+
+    local sogo_service="sogo-mailcow"
+    local custom_image="${CUSTOM_SOGO_IMAGE:-ghcr.io/edulution-io/edulution-mail-sogo:dev-dennis}"
+    local marker_host="${MAILCOW_PATH}/data/.custom-sogo-applied"
+
+    # Check if already using custom image
+    if [ -f "${marker_host}" ]; then
+        log_info "Already using custom SOGo image"
+        return 0
+    fi
+
+    log_info "Pulling custom SOGo image: ${custom_image}"
+    docker pull "${custom_image}" || {
+        log_error "Failed to pull custom SOGo image"
+        return 1
+    }
+
+    log_info "Stopping Mailcow SOGo container"
+    cd "${MAILCOW_PATH}/mailcow"
+    docker compose stop ${sogo_service}
+    docker compose rm -f ${sogo_service}
+
+    # Create docker-compose.override.yml with custom SOGo image
+    log_info "Creating docker-compose override for custom SOGo"
+    cat <<EOF > "${MAILCOW_PATH}/mailcow/docker-compose.override.yml"
+services:
+  nginx-mailcow:
+    ports: !override
+      - 8443:443
+
+  sogo-mailcow:
+    image: ${custom_image}
+    volumes:
+      #- ./data/conf/sogo/custom-theme.css:/usr/lib/GNUstep/SOGo/WebServerResources/css/theme-default.css:z
+      #- ./data/conf/sogo/sogo-full.svg:/usr/lib/GNUstep/SOGo/WebServerResources/img/sogo-full.svg:z
+
+volumes:
+  vmail-vol-1:
+    driver_opts:
+      type: none
+      device: ${MAILCOW_PATH}/data/mail
+      o: bind
+EOF
+
+    log_info "Starting SOGo with custom image"
+    docker compose up -d ${sogo_service}
+
+    # Wait for SOGo to be ready
+    local attempt=0
+    while ! docker ps --format "{{.Names}}" | grep -q "sogo-mailcow"; do
+        attempt=$((attempt + 1))
+        if [ $attempt -gt 30 ]; then
+            log_error "Custom SOGo container failed to start"
+            return 1
+        fi
+        log_info "Waiting for custom SOGo container... ($attempt/30)"
+        sleep 2
+    done
+
+    log_success "Custom SOGo container is running"
+
+    # Wait for SOGo process
+    attempt=0
+    while ! docker exec mailcowdockerized-sogo-mailcow-1 pgrep -x sogod > /dev/null 2>&1; do
+        attempt=$((attempt + 1))
+        if [ $attempt -gt 30 ]; then
+            log_warning "SOGo process not detected (may still be starting)"
+            break
+        fi
+        log_info "Waiting for SOGo process... ($attempt/30)"
+        sleep 2
+    done
+
+    # Create marker
+    touch "${marker_host}"
+    log_success "Custom SOGo image applied successfully"
+}
+
 # Apply SOGo patches for SQL-based group support
 apply_sogo_patches() {
     log_step "Applying SOGo patches for SQL group support"
@@ -749,7 +830,7 @@ EOF
         apply_docker_network
         set_mailcow_token
         create_edulution_view
-        apply_sogo_patches
+        use_custom_sogo_image
         start_services
         exit 0
     fi
@@ -763,7 +844,7 @@ EOF
     set_mailcow_token
     create_edulution_view
     wait_for_mailcow
-    apply_sogo_patches
+    use_custom_sogo_image
     start_services
 }
 
