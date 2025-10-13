@@ -1,19 +1,20 @@
 /**
  * SOGo SQL Groups Expansion Patch
  *
- * Extends SOGo's Card service to support SQL-based groups from edulution_gal.
+ * Extends SOGo's Card and Attendees services to support SQL-based groups from edulution_gal.
  * This patch enables group expansion for SQL groups without requiring LDAP.
  *
  * Features:
  * - Makes SQL groups expandable (isGroup=1 from edulution_gal)
  * - Redirects /members requests to custom PHP middleware
- * - Works with both email composer and contacts module
+ * - Works with email composer, contacts module, AND calendar invitations
+ * - Patches both Card service (for mail/contacts) and Attendees service (for calendar)
  */
 
 (function() {
   'use strict';
 
-  // Wait for Angular and Card service to be available
+  // Patch Card service (for Contacts and Email)
   angular.module('SOGo.ContactsUI').run(['Card', '$http', function(Card, $http) {
 
     console.log('[SQL Groups] Patching Card service for SQL group support');
@@ -108,4 +109,93 @@
 
     console.log('[SQL Groups] Card service patched successfully');
   }]);
+
+  // Patch Attendees service (for Calendar invitations)
+  // Wait for SchedulerUI module to load
+  setTimeout(function() {
+    try {
+      angular.module('SOGo.SchedulerUI').run(['Attendees', function(Attendees) {
+
+        console.log('[SQL Groups] Patching Attendees service for SQL group support in Calendar');
+
+        // Store original add function
+        var originalAdd = Attendees.prototype.add;
+
+        /**
+         * Patched add() to expand SQL groups in calendar invitations
+         */
+        Attendees.prototype.add = function(card, options) {
+          var _this = this;
+          var attendee, promise = Attendees.$q.when();
+
+          if (card && !card.$isList({expandable: true})) {
+            // Check if this is a SQL group (not an expandable LDAP list)
+            var isSQLGroup = card.isgroup || (card.isGroup && card.isGroup === 1);
+
+            if (isSQLGroup && card.$isGroup && card.$isGroup()) {
+              // This is a SQL group - expand it
+              console.log('[SQL Groups] Expanding SQL group in calendar:', card.$$email || card.c_uid);
+
+              // Initialize organizer if needed
+              if (!this.component.attendees || (options && options.organizerCalendar)) {
+                this.initOrganizer(options? options.organizerCalendar : null);
+              }
+
+              // Fetch members and add them individually
+              promise = card.$members().then(function(members) {
+                console.log('[SQL Groups] Adding', members.length, 'members from SQL group');
+
+                // Add each member as an individual attendee
+                var addPromises = [];
+                _.forEach(members, function(member) {
+                  // Create attendee object
+                  attendee = {
+                    uid: member.c_uid,
+                    domain: member.c_domain,
+                    isGroup: false,
+                    isExpandableGroup: false,
+                    isResource: member.isresource,
+                    name: member.c_cn,
+                    email: member.$$email || (member.emails && member.emails[0] && member.emails[0].value),
+                    role: Attendees.ROLES.REQ_PARTICIPANT,
+                    partstat: 'needs-action',
+                    $avatarIcon: 'person'
+                  };
+
+                  // Check if not already an attendee
+                  if (!_.find(_this.component.attendees, function(o) {
+                    return o.email == attendee.email;
+                  })) {
+                    attendee.image = Attendees.$gravatar(attendee.email, 32);
+                    if (_this.component.attendees)
+                      _this.component.attendees.push(attendee);
+                    else
+                      _this.component.attendees = [attendee];
+                    _this.updateFreeBusyAttendee(attendee);
+                  }
+                });
+
+                return Attendees.$q.all(addPromises);
+              }).catch(function(error) {
+                console.error('[SQL Groups] Failed to expand SQL group in calendar:', error);
+                // Fall back to original behavior
+                return originalAdd.call(_this, card, options);
+              });
+
+              return promise;
+            }
+          }
+
+          // Not a SQL group, use original function
+          return originalAdd.call(this, card, options);
+        };
+
+        console.log('[SQL Groups] Attendees service patched successfully');
+      }]);
+    } catch(e) {
+      console.log('[SQL Groups] SchedulerUI module not yet loaded, will retry');
+      // Module not loaded yet, that's okay - it will be patched when calendar is opened
+    }
+  }, 1000); // Wait 1 second for SchedulerUI module to load
+
 })();
