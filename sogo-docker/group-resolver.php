@@ -22,7 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Get database credentials from environment
-$dbHost = getenv('DBHOST') ?: 'unix_socket=/var/run/mysqld/mysqld.sock';
+$dbHost = getenv('DBHOST') ?: 'mysql-mailcow';
 $dbUser = getenv('DBUSER') ?: 'mailcow';
 $dbPass = getenv('DBPASS') ?: '';
 $dbName = getenv('DBNAME') ?: 'mailcow';
@@ -40,14 +40,14 @@ if (empty($email)) {
 // Connect to database
 try {
     $pdo = new PDO(
-        "mysql:unix_socket=/var/run/mysqld/mysqld.sock;dbname={$dbName}",
+        "mysql:host={$dbHost};dbname={$dbName}",
         $dbUser,
         $dbPass,
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
 } catch (PDOException $e) {
     http_response_code(500);
-    echo json_encode(['error' => 'Database connection failed']);
+    echo json_encode(['error' => 'Database connection failed', 'details' => $e->getMessage()]);
     error_log("Group resolver DB error: " . $e->getMessage());
     exit;
 }
@@ -80,7 +80,7 @@ function resolveGroupMembers($pdo, $email, &$processed = []) {
     if (!$groupInfo) {
         // Not a group, return as regular member
         $stmt = $pdo->prepare("
-            SELECT c_uid, c_cn, c_mail
+            SELECT c_uid, c_cn, mail
             FROM edulution_gal
             WHERE c_uid = :email
         ");
@@ -92,7 +92,7 @@ function resolveGroupMembers($pdo, $email, &$processed = []) {
                 'c_uid' => $member['c_uid'],
                 'c_cn' => $member['c_cn'] ?: $member['c_uid'],
                 'emails' => [[
-                    'value' => $member['c_mail'] ?: $member['c_uid'],
+                    'value' => $member['mail'] ?: $member['c_uid'],
                     'type' => 'work'
                 ]]
             ]];
