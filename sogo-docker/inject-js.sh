@@ -18,12 +18,13 @@ if [ ! -f "$TEMPLATE_FILE" ]; then
     exit 1
 fi
 
-# Inject the script tag before the closing </head> tag
-if grep -q "</head>" "$TEMPLATE_FILE"; then
+# Inject the script tag before the closing </body> tag (after all other scripts)
+# This ensures Angular is loaded first
+if grep -q "</body>" "$TEMPLATE_FILE"; then
     # JS_SCRIPT already includes the closing </script> tag
-    sed -i "s|</head>|$JS_SCRIPT\n  </head>|" "$TEMPLATE_FILE"
+    sed -i "s|</body>|$JS_SCRIPT\n  </body>|" "$TEMPLATE_FILE"
     echo "Successfully injected SQL groups JavaScript into SOGo template"
 else
-    echo "WARNING: Could not find </head> tag in template file"
+    echo "WARNING: Could not find </body> tag in template file"
     exit 1
 fi

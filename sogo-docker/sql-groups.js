@@ -11,13 +11,27 @@
  * - Patches both Card service (for mail/contacts) and Attendees service (for calendar)
  */
 
+console.log('[SQL Groups] Script file loaded!');
+
 (function() {
   'use strict';
 
-  // Patch Card service (for Contacts and Email)
-  angular.module('SOGo.ContactsUI').run(['Card', '$http', function(Card, $http) {
+  console.log('[SQL Groups] IIFE started');
 
-    console.log('[SQL Groups] Patching Card service for SQL group support');
+  // Wait for Angular to be fully loaded
+  function initSQLGroupsPatch() {
+    // Check if Angular is available
+    if (typeof angular === 'undefined') {
+      console.log('[SQL Groups] Waiting for Angular to load...');
+      setTimeout(initSQLGroupsPatch, 100);
+      return;
+    }
+
+    // Try to patch Card service (for Contacts and Email)
+    try {
+      angular.module('SOGo.ContactsUI').run(['Card', '$http', function(Card, $http) {
+
+        console.log('[SQL Groups] Patching Card service for SQL group support');
 
     // Store original functions
     var originalIsGroup = Card.prototype.$isGroup;
@@ -107,16 +121,19 @@
       return Card.$q.reject("Card " + this.id + " is not a group");
     };
 
-    console.log('[SQL Groups] Card service patched successfully');
-  }]);
+        console.log('[SQL Groups] Card service patched successfully');
+      }]);
+    } catch(e) {
+      console.log('[SQL Groups] ContactsUI module not available on this page:', e.message);
+    }
 
-  // Patch Attendees service (for Calendar invitations)
-  // Wait for SchedulerUI module to load
-  setTimeout(function() {
-    try {
-      angular.module('SOGo.SchedulerUI').run(['Attendees', function(Attendees) {
+      // Patch Attendees service (for Calendar invitations)
+    // Wait for SchedulerUI module to load
+    setTimeout(function() {
+      try {
+        angular.module('SOGo.SchedulerUI').run(['Attendees', function(Attendees) {
 
-        console.log('[SQL Groups] Patching Attendees service for SQL group support in Calendar');
+          console.log('[SQL Groups] Patching Attendees service for SQL group support in Calendar');
 
         // Store original add function
         var originalAdd = Attendees.prototype.add;
@@ -190,12 +207,19 @@
           return originalAdd.call(this, card, options);
         };
 
-        console.log('[SQL Groups] Attendees service patched successfully');
-      }]);
-    } catch(e) {
-      console.log('[SQL Groups] SchedulerUI module not yet loaded, will retry');
-      // Module not loaded yet, that's okay - it will be patched when calendar is opened
-    }
-  }, 1000); // Wait 1 second for SchedulerUI module to load
+          console.log('[SQL Groups] Attendees service patched successfully');
+        }]);
+      } catch(e) {
+        console.log('[SQL Groups] SchedulerUI module not available on this page:', e.message);
+      }
+    }, 1000); // Wait 1 second for SchedulerUI module to load
+  }
+
+  // Start initialization
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initSQLGroupsPatch);
+  } else {
+    initSQLGroupsPatch();
+  }
 
 })();
