@@ -1,65 +1,89 @@
---- a/SoObjects/Appointments/SOGoAppointmentFolder.m
-+++ b/SoObjects/Appointments/SOGoAppointmentFolder.m
-@@ -443,7 +443,52 @@
+--- SoObjects/Appointments/SOGoAppointmentFolder.m.orig	2025-10-13 22:12:35
++++ SoObjects/Appointments/SOGoAppointmentFolder.m	2025-10-13 22:13:16
+@@ -443,10 +443,85 @@
        if (dict && [[dict objectForKey: @"isGroup"] boolValue])
          {
            id <SOGoSource> source;
-+          NSString *groupMembersString;
-+          NSArray *memberEmails;
-+          int i;
-
++          NSString *groupMembersStr;
+ 
            source = [[SOGoUserManager sharedUserManager] sourceWithID: [dict objectForKey: @"SOGoSource"]];
 -          if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
 +
-+          // Check for static groupMembers field from SQL view (edulution_gal)
-+          groupMembersString = [dict objectForKey: @"groupMembers"];
++          // Check for SQL-based groups with groupMembers field
++          groupMembersStr = [dict objectForKey: @"groupMembers"];
 +
-+          if (groupMembersString && [groupMembersString length] > 0)
-+            {
-+              // Static group from SQL view - parse comma-separated or space-separated emails
++          if (groupMembersStr && [groupMembersStr length] > 0)
+             {
++              // SQL group - parse groupMembers field (space-separated email list)
++              NSArray *memberEmails;
 +              NSString *memberEmail, *trimmedEmail;
-+              SOGoUser *sogoUser;
++              SOGoUser *memberUser;
 +              NSDictionary *memberDict;
++              NSMutableSet *processedEmails;
++              int j;
 +
-+              // Support both comma and space as separators
-+              groupMembersString = [groupMembersString stringByReplacingOccurrencesOfString: @"," withString: @" "];
-+              memberEmails = [groupMembersString componentsSeparatedByString: @" "];
++              // Support both comma and space separators
++              groupMembersStr = [groupMembersStr stringByReplacingOccurrencesOfString: @"," withString: @" "];
++              memberEmails = [groupMembersStr componentsSeparatedByString: @" "];
 +              allUsers = [NSMutableArray arrayWithCapacity: [memberEmails count]];
++              processedEmails = [NSMutableSet setWithCapacity: [memberEmails count]];
 +
-+              for (i = 0; i < [memberEmails count]; i++)
++              for (j = 0; j < [memberEmails count]; j++)
 +                {
-+                  memberEmail = [memberEmails objectAtIndex: i];
++                  memberEmail = [memberEmails objectAtIndex: j];
 +                  trimmedEmail = [memberEmail stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
 +
-+                  if ([trimmedEmail length] == 0)
++                  if ([trimmedEmail length] == 0 || [processedEmails containsObject: trimmedEmail])
 +                    continue;
 +
-+                  // Check if member is itself a group (recursive resolution)
++                  [processedEmails addObject: trimmedEmail];
++
++                  // Check if member is also a group (recursive resolution)
 +                  memberDict = [[SOGoUserManager sharedUserManager] contactInfosForUserWithUIDorEmail: trimmedEmail
 +                                                                                            inDomain: domain];
 +
 +                  if (memberDict && [[memberDict objectForKey: @"isGroup"] boolValue])
 +                    {
-+                      // Recursive: member is a group - resolve it
-+                      NSArray *subMembers = [self _usersForFolderOfType: SOGoAppointmentFolderType
-+                                                             matchingUID: trimmedEmail
-+                                                               inContext: context];
-+                      if (subMembers && [subMembers count] > 0)
-+                        [allUsers addObjectsFromArray: subMembers];
++                      // Nested group - recursively resolve its members
++                      NSString *nestedGroupMembers = [memberDict objectForKey: @"groupMembers"];
++                      if (nestedGroupMembers && [nestedGroupMembers length] > 0)
++                        {
++                          NSArray *nestedEmails;
++                          NSString *nestedEmail, *trimmedNestedEmail;
++                          int k;
++
++                          nestedGroupMembers = [nestedGroupMembers stringByReplacingOccurrencesOfString: @"," withString: @" "];
++                          nestedEmails = [nestedGroupMembers componentsSeparatedByString: @" "];
++
++                          for (k = 0; k < [nestedEmails count]; k++)
++                            {
++                              nestedEmail = [nestedEmails objectAtIndex: k];
++                              trimmedNestedEmail = [nestedEmail stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
++
++                              if ([trimmedNestedEmail length] > 0 && ![processedEmails containsObject: trimmedNestedEmail])
++                                {
++                                  [processedEmails addObject: trimmedNestedEmail];
++                                  memberUser = [SOGoUser userWithLogin: trimmedNestedEmail roles: nil];
++                                  if (memberUser)
++                                    [allUsers addObject: memberUser];
++                                }
++                            }
++                        }
 +                    }
 +                  else
 +                    {
 +                      // Regular user
-+                      sogoUser = [SOGoUser userWithLogin: trimmedEmail roles: nil];
-+                      if (sogoUser && ![allUsers containsObject: sogoUser])
-+                        [allUsers addObject: sogoUser];
++                      memberUser = [SOGoUser userWithLogin: trimmedEmail roles: nil];
++                      if (memberUser)
++                        [allUsers addObject: memberUser];
 +                    }
 +                }
 +
-+              // Remove active user to prevent self-subscription
++              // Remove active user to prevent self-invitation
 +              [allUsers removeObject: [context activeUser]];
 +            }
 +          else if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
-             {
-+              // Dynamic group via LDAP
++            {
                NSArray *members;
+ 
+               members = [(id<SOGoMembershipSource>)(source) membersForGroupWithUID: [dict objectForKey: @"c_uid"]];

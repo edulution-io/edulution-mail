@@ -1,25 +1,25 @@
---- a/UI/Contacts/UIxContactView.m
-+++ b/UI/Contacts/UIxContactView.m
-@@ -396,7 +396,54 @@
+--- UI/Contacts/UIxContactView.m.orig	2025-10-13 22:12:35
++++ UI/Contacts/UIxContactView.m	2025-10-13 22:13:39
+@@ -395,8 +395,57 @@
+ 
    if ([[dict objectForKey: @"isGroup"] boolValue])
      {
 -      if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
-+      NSString *groupMembersString;
-+      NSArray *memberEmails;
++      NSString *groupMembersStr;
 +
-+      // Check for static groupMembers field from SQL view (edulution_gal)
-+      groupMembersString = [dict objectForKey: @"groupMembers"];
++      // Check for SQL-based groups with groupMembers field
++      groupMembersStr = [dict objectForKey: @"groupMembers"];
 +
-+      if (groupMembersString && [groupMembersString length] > 0)
-+        {
-+          // Static group from SQL view - parse comma-separated or space-separated emails
++      if (groupMembersStr && [groupMembersStr length] > 0)
+         {
++          // SQL group - parse groupMembers field (space-separated email list)
++          NSArray *memberEmails;
 +          NSString *memberEmail, *trimmedEmail;
-+          NSDictionary *memberDict;
-+          unsigned int i;
++          NSDictionary *memberContactInfo;
 +
-+          // Support both comma and space as separators
-+          groupMembersString = [groupMembersString stringByReplacingOccurrencesOfString: @"," withString: @" "];
-+          memberEmails = [groupMembersString componentsSeparatedByString: @" "];
++          // Support both comma and space separators
++          groupMembersStr = [groupMembersStr stringByReplacingOccurrencesOfString: @"," withString: @" "];
++          memberEmails = [groupMembersStr componentsSeparatedByString: @" "];
 +          allUsersData = [NSMutableArray arrayWithCapacity: [memberEmails count]];
 +
 +          for (i = 0; i < [memberEmails count]; i++)
@@ -30,29 +30,21 @@
 +              if ([trimmedEmail length] == 0)
 +                continue;
 +
-+              // Check if member is itself a group (recursive resolution)
-+              memberDict = [source lookupContactEntryWithUIDorEmail: trimmedEmail
-+                                                           inDomain: nil];
++              // Lookup user info for this email
++              memberContactInfo = [source lookupContactEntryWithUIDorEmail: trimmedEmail inDomain: nil];
++              if (memberContactInfo)
++                {
++                  NSString *memberCN = [memberContactInfo objectForKey: @"c_cn"];
++                  if (!memberCN || [memberCN length] == 0)
++                    memberCN = trimmedEmail;
 +
-+              if (memberDict && [[memberDict objectForKey: @"isGroup"] boolValue])
-+                {
-+                  // TODO: Implement recursive resolution for nested groups
-+                  // For now, skip nested groups in the /members endpoint
-+                  continue;
-+                }
-+              else
-+                {
-+                  // Regular user - get their full info
-+                  user = [SOGoUser userWithLogin: trimmedEmail];
-+                  allUserEmails = [NSMutableArray array];
-+                  emails = [[user allEmails] objectEnumerator];
-+                  while ((email = [emails nextObject])) {
-+                    [allUserEmails addObject: [NSDictionary dictionaryWithObjectsAndKeys:
-+                                                            email, @"value", @"work", @"type", nil]];
-+                  }
++                  allUserEmails = [NSMutableArray arrayWithCapacity: 1];
++                  [allUserEmails addObject: [NSDictionary dictionaryWithObjectsAndKeys:
++                                                            trimmedEmail, @"value", @"work", @"type", nil]];
++
 +                  userData = [NSDictionary dictionaryWithObjectsAndKeys:
-+                                           [user loginInDomain], @"c_uid",
-+                                           [user cn], @"c_cn",
++                                           trimmedEmail, @"c_uid",
++                                           memberCN, @"c_cn",
 +                                           allUserEmails, @"emails", nil];
 +                  [allUsersData addObject: userData];
 +                }
@@ -63,6 +55,7 @@
 +                                  andString: [dict jsonRepresentation]];
 +        }
 +      else if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
-         {
-+          // LDAP group - use existing protocol
++        {
            allUsers = [(id<SOGoMembershipSource>)(source) membersForGroupWithUID: [dict objectForKey: @"c_uid"]];
+           max = [allUsers count];
+           allUsersData = [NSMutableArray arrayWithCapacity: max];
