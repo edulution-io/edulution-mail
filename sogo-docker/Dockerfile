@@ -54,17 +54,21 @@ COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY acl.diff /acl.diff
 COPY navMailcowBtns.diff /navMailcowBtns.diff
 COPY stop-supervisor.sh /usr/local/sbin/stop-supervisor.sh
+COPY inject-js.sh /inject-js.sh
 COPY docker-entrypoint.sh /
 
 # Edulution: Add SQL group expansion middleware
 COPY group-resolver.php /usr/lib/GNUstep/SOGo/WebServerResources/group-resolver.php
+COPY sql-groups.js /usr/lib/GNUstep/SOGo/WebServerResources/js/sql-groups.js
 COPY nginx-group-resolver.conf /etc/nginx/sites-available/group-resolver
 RUN ln -s /etc/nginx/sites-available/group-resolver /etc/nginx/sites-enabled/group-resolver \
   && rm -f /etc/nginx/sites-enabled/default
 
 RUN chmod +x /bootstrap-sogo.sh \
   /usr/local/sbin/stop-supervisor.sh \
-  && chmod 644 /usr/lib/GNUstep/SOGo/WebServerResources/group-resolver.php
+  /inject-js.sh \
+  && chmod 644 /usr/lib/GNUstep/SOGo/WebServerResources/group-resolver.php \
+  && chmod 644 /usr/lib/GNUstep/SOGo/WebServerResources/js/sql-groups.js
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 

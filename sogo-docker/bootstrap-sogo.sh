@@ -148,6 +148,10 @@ if patch -R -sfN --dry-run /usr/lib/GNUstep/SOGo/Templates/UIxTopnavToolbar.wox 
   patch -R /usr/lib/GNUstep/SOGo/Templates/UIxTopnavToolbar.wox < /navMailcowBtns.diff;
 fi
 
+# Edulution: Inject SQL groups JavaScript into SOGo UI
+echo "Injecting SQL groups JavaScript..."
+/inject-js.sh
+
 # Rename custom logo, if any
 [[ -f /etc/sogo/sogo-full.svg ]] && mv /etc/sogo/sogo-full.svg /etc/sogo/custom-fulllogo.svg
 
