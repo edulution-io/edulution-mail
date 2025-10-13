@@ -133,7 +133,9 @@ SELECT
     ''                                AS ad_aliases,
     ''                                AS ext_acl,
     m.kind                            AS kind,
-    m.multiple_bookings               AS multiple_bookings
+    m.multiple_bookings               AS multiple_bookings,
+    NULL                              AS isGroup,
+    NULL                              AS groupMembers
 FROM mailbox m
 WHERE m.active=1
 
@@ -155,7 +157,9 @@ SELECT
     ''                                AS ad_aliases,
     ''                                AS ext_acl,
     ''                                AS kind,
-    -1                                AS multiple_bookings
+    -1                                AS multiple_bookings,
+    NULL                              AS isGroup,
+    NULL                              AS groupMembers
 FROM alias a
 LEFT JOIN mailbox m ON a.goto = m.username
 WHERE a.active=1
@@ -188,7 +192,9 @@ SELECT
     ''                                AS ad_aliases,
     ''                                AS ext_acl,
     ''                                AS kind,
-    -1                                AS multiple_bookings
+    -1                                AS multiple_bookings,
+    1                                 AS isGroup,
+    REPLACE(a.goto, ',', ' ')         AS groupMembers
 FROM alias a
 WHERE a.active=1
   AND a.sogo_visible=0;
@@ -497,6 +503,107 @@ ensure_sogo_files() {
   log_success "SOGo theme files ready (respected active theme + version)"
 }
 
+# Apply SOGo patches for SQL-based group support
+apply_sogo_patches() {
+    log_step "Applying SOGo patches for SQL group support"
+
+    local sogo_container="mailcowdockerized-sogo-mailcow-1"
+    local patch_dir="/templates/sogo-patches"
+    local marker_container="/usr/lib/GNUstep/SOGo/.sogo-patches-applied"
+    local marker_host="${MAILCOW_PATH}/data/.sogo-patches-applied"
+
+    # Check if patches already applied (idempotent)
+    if [ -f "${marker_host}" ]; then
+        log_info "SOGo patches already applied"
+        return 0
+    fi
+
+    # Wait for SOGo container to be running
+    local attempt=0
+    while ! docker ps --format "{{.Names}}" | grep -q "sogo-mailcow"; do
+        attempt=$((attempt + 1))
+        if [ $attempt -gt 60 ]; then
+            log_error "SOGo container not running after 60 attempts"
+            return 1
+        fi
+        log_info "Waiting for SOGo container... ($attempt/60)"
+        sleep 5
+    done
+
+    log_success "SOGo container is running"
+
+    # Wait for SOGo to be fully initialized
+    sleep 5
+
+    # Check if patches were already applied inside container
+    if docker exec ${sogo_container} test -f ${marker_container} 2>/dev/null; then
+        log_info "SOGo patches already applied (container marker exists)"
+        # Create host marker to sync state
+        touch "${marker_host}"
+        return 0
+    fi
+
+    # Install patch utility if not available
+    log_info "Installing patch utility in SOGo container"
+    docker exec ${sogo_container} apt-get update -qq 2>&1 > /dev/null || true
+    docker exec ${sogo_container} apt-get install -y -qq patch 2>&1 > /dev/null || true
+
+    # Copy patches to container
+    log_info "Copying patches to SOGo container"
+    docker cp ${patch_dir}/calendar-groups.patch ${sogo_container}:/tmp/
+    docker cp ${patch_dir}/contacts-groups.patch ${sogo_container}:/tmp/
+
+    if [ $? -ne 0 ]; then
+        log_error "Failed to copy patches to container"
+        return 1
+    fi
+
+    # Apply calendar patch
+    log_info "Applying calendar groups patch"
+    docker exec ${sogo_container} bash -c "cd / && patch -p1 -N < /tmp/calendar-groups.patch"
+
+    if [ $? -ne 0 ]; then
+        log_warning "Calendar patch may have already been applied or failed"
+    else
+        log_success "Calendar patch applied"
+    fi
+
+    # Apply contacts patch
+    log_info "Applying contacts groups patch"
+    docker exec ${sogo_container} bash -c "cd / && patch -p1 -N < /tmp/contacts-groups.patch"
+
+    if [ $? -ne 0 ]; then
+        log_warning "Contacts patch may have already been applied or failed"
+    else
+        log_success "Contacts patch applied"
+    fi
+
+    # Create marker files
+    docker exec ${sogo_container} touch ${marker_container}
+    mkdir -p "${MAILCOW_PATH}/data"
+    touch "${marker_host}"
+
+    log_success "SOGo patches applied successfully"
+
+    # Restart SOGo to apply changes
+    log_info "Restarting SOGo container to apply patches"
+    docker restart ${sogo_container}
+
+    # Wait for SOGo to be ready
+    attempt=0
+    while ! docker exec ${sogo_container} pgrep -x sogod > /dev/null 2>&1; do
+        attempt=$((attempt + 1))
+        if [ $attempt -gt 30 ]; then
+            log_warning "SOGo process not detected after restart (may still be starting)"
+            break
+        fi
+        log_info "Waiting for SOGo process... ($attempt/30)"
+        sleep 2
+    done
+
+    log_success "SOGo restarted with patches applied"
+}
+
 # Apply template files
 apply_templates() {
     log_step "Applying template files"
@@ -636,12 +743,13 @@ EOF
     # Check if Mailcow is already running
     if docker compose --project-directory "${MAILCOW_PATH}/mailcow/" ps | grep -q 'mailcow'; then
         log_warning "Mailcow is already running - only starting API and sync services"
-        
+
         ensure_sogo_files
         configure_sogo_gal
         apply_docker_network
         set_mailcow_token
         create_edulution_view
+        apply_sogo_patches
         start_services
         exit 0
     fi
@@ -655,6 +763,7 @@ EOF
     set_mailcow_token
     create_edulution_view
     wait_for_mailcow
+    apply_sogo_patches
     start_services
 }
 

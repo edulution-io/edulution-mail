@@ -1,0 +1,65 @@
+--- a/SoObjects/Appointments/SOGoAppointmentFolder.m
++++ b/SoObjects/Appointments/SOGoAppointmentFolder.m
+@@ -443,7 +443,52 @@
+       if (dict && [[dict objectForKey: @"isGroup"] boolValue])
+         {
+           id <SOGoSource> source;
++          NSString *groupMembersString;
++          NSArray *memberEmails;
++          int i;
+
+           source = [[SOGoUserManager sharedUserManager] sourceWithID: [dict objectForKey: @"SOGoSource"]];
+-          if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
++
++          // Check for static groupMembers field from SQL view (edulution_gal)
++          groupMembersString = [dict objectForKey: @"groupMembers"];
++
++          if (groupMembersString && [groupMembersString length] > 0)
++            {
++              // Static group from SQL view - parse comma-separated or space-separated emails
++              NSString *memberEmail, *trimmedEmail;
++              SOGoUser *sogoUser;
++              NSDictionary *memberDict;
++
++              // Support both comma and space as separators
++              groupMembersString = [groupMembersString stringByReplacingOccurrencesOfString: @"," withString: @" "];
++              memberEmails = [groupMembersString componentsSeparatedByString: @" "];
++              allUsers = [NSMutableArray arrayWithCapacity: [memberEmails count]];
++
++              for (i = 0; i < [memberEmails count]; i++)
++                {
++                  memberEmail = [memberEmails objectAtIndex: i];
++                  trimmedEmail = [memberEmail stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
++
++                  if ([trimmedEmail length] == 0)
++                    continue;
++
++                  // Check if member is itself a group (recursive resolution)
++                  memberDict = [[SOGoUserManager sharedUserManager] contactInfosForUserWithUIDorEmail: trimmedEmail
++                                                                                            inDomain: domain];
++
++                  if (memberDict && [[memberDict objectForKey: @"isGroup"] boolValue])
++                    {
++                      // Recursive: member is a group - resolve it
++                      NSArray *subMembers = [self _usersForFolderOfType: SOGoAppointmentFolderType
++                                                             matchingUID: trimmedEmail
++                                                               inContext: context];
++                      if (subMembers && [subMembers count] > 0)
++                        [allUsers addObjectsFromArray: subMembers];
++                    }
++                  else
++                    {
++                      // Regular user
++                      sogoUser = [SOGoUser userWithLogin: trimmedEmail roles: nil];
++                      if (sogoUser && ![allUsers containsObject: sogoUser])
++                        [allUsers addObject: sogoUser];
++                    }
++                }
++
++              // Remove active user to prevent self-subscription
++              [allUsers removeObject: [context activeUser]];
++            }
++          else if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
+             {
++              // Dynamic group via LDAP
+               NSArray *members;

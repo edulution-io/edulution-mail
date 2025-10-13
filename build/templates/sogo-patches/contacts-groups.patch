@@ -1,0 +1,68 @@
+--- a/UI/Contacts/UIxContactView.m
++++ b/UI/Contacts/UIxContactView.m
+@@ -396,7 +396,54 @@
+   if ([[dict objectForKey: @"isGroup"] boolValue])
+     {
+-      if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
++      NSString *groupMembersString;
++      NSArray *memberEmails;
++
++      // Check for static groupMembers field from SQL view (edulution_gal)
++      groupMembersString = [dict objectForKey: @"groupMembers"];
++
++      if (groupMembersString && [groupMembersString length] > 0)
++        {
++          // Static group from SQL view - parse comma-separated or space-separated emails
++          NSString *memberEmail, *trimmedEmail;
++          NSDictionary *memberDict;
++          unsigned int i;
++
++          // Support both comma and space as separators
++          groupMembersString = [groupMembersString stringByReplacingOccurrencesOfString: @"," withString: @" "];
++          memberEmails = [groupMembersString componentsSeparatedByString: @" "];
++          allUsersData = [NSMutableArray arrayWithCapacity: [memberEmails count]];
++
++          for (i = 0; i < [memberEmails count]; i++)
++            {
++              memberEmail = [memberEmails objectAtIndex: i];
++              trimmedEmail = [memberEmail stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
++
++              if ([trimmedEmail length] == 0)
++                continue;
++
++              // Check if member is itself a group (recursive resolution)
++              memberDict = [source lookupContactEntryWithUIDorEmail: trimmedEmail
++                                                           inDomain: nil];
++
++              if (memberDict && [[memberDict objectForKey: @"isGroup"] boolValue])
++                {
++                  // TODO: Implement recursive resolution for nested groups
++                  // For now, skip nested groups in the /members endpoint
++                  continue;
++                }
++              else
++                {
++                  // Regular user - get their full info
++                  user = [SOGoUser userWithLogin: trimmedEmail];
++                  allUserEmails = [NSMutableArray array];
++                  emails = [[user allEmails] objectEnumerator];
++                  while ((email = [emails nextObject])) {
++                    [allUserEmails addObject: [NSDictionary dictionaryWithObjectsAndKeys:
++                                                            email, @"value", @"work", @"type", nil]];
++                  }
++                  userData = [NSDictionary dictionaryWithObjectsAndKeys:
++                                           [user loginInDomain], @"c_uid",
++                                           [user cn], @"c_cn",
++                                           allUserEmails, @"emails", nil];
++                  [allUsersData addObject: userData];
++                }
++            }
++
++          dict = [NSDictionary dictionaryWithObject: allUsersData forKey: @"members"];
++          result = [self responseWithStatus: 200
++                                  andString: [dict jsonRepresentation]];
++        }
++      else if ([source conformsToProtocol:@protocol(SOGoMembershipSource)])
+         {
++          // LDAP group - use existing protocol
+           allUsers = [(id<SOGoMembershipSource>)(source) membersForGroupWithUID: [dict objectForKey: @"c_uid"]];

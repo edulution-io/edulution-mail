@@ -1,9 +1,9 @@
 name: Build docker image
 
 on:
-  
+
   push:
-    branches: ["main", "dev"]
+    branches: ["main", "dev", "dev-dennis"]
 
   workflow_dispatch:
 
@@ -41,6 +41,8 @@ jobs:
             echo "tags=ghcr.io/${{ github.repository }}:main,ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref_name }}" == "dev" ]]; then
             echo "tags=ghcr.io/${{ github.repository }}:dev" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" == "dev-dennis" ]]; then
+            echo "tags=ghcr.io/${{ github.repository }}:dev-dennis" >> $GITHUB_OUTPUT
           else
             echo "tags=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
