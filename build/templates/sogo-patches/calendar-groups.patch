@@ -1,5 +1,5 @@
---- SoObjects/Appointments/SOGoAppointmentFolder.m.orig	2025-10-13 22:12:35
-+++ SoObjects/Appointments/SOGoAppointmentFolder.m	2025-10-13 22:13:16
+--- a/SoObjects/Appointments/SOGoAppointmentFolder.m
++++ b/SoObjects/Appointments/SOGoAppointmentFolder.m
 @@ -443,10 +443,85 @@
        if (dict && [[dict objectForKey: @"isGroup"] boolValue])
          {

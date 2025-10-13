@@ -1,5 +1,5 @@
---- UI/Contacts/UIxContactView.m.orig	2025-10-13 22:12:35
-+++ UI/Contacts/UIxContactView.m	2025-10-13 22:13:39
+--- a/UI/Contacts/UIxContactView.m
++++ b/UI/Contacts/UIxContactView.m
 @@ -395,8 +395,57 @@
  
    if ([[dict objectForKey: @"isGroup"] boolValue])
