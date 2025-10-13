@@ -101,4 +101,4 @@ In their header comment there is the theme name a version number that must be in
 
 ### Volume mount
 
-The same folder `/srv/docker/edulution-mail/mailcow/data/conf/sogo:/data/apps/mail/sogo/overrides:rw` is mounted in the API of the [edulution-ui](https://github.com/edulution-io/edulution-ui).
+The same folder `/srv/docker/edulution-mail/mailcow/data/conf/sogo` is mounted read/writeable in the API of the [edulution-ui](https://github.com/edulution-io/edulution-ui).
