@@ -1,7 +1,8 @@
 #!/bin/bash
 # Inject SQL groups JavaScript into SOGo's main UI template
 
-TEMPLATE_FILE="/usr/lib/GNUstep/SOGo/Templates/UIxPageFrame.wox"
+# Work on the rsync'ed files in /sogo_web/ (the actual served files)
+TEMPLATE_FILE="/sogo_web/Templates/UIxPageFrame.wox"
 JS_SCRIPT='    <script type="text/javascript" src="js/sql-groups.js"></script>'
 
 # Check if the injection has already been done
