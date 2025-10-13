@@ -148,9 +148,36 @@ if patch -R -sfN --dry-run /usr/lib/GNUstep/SOGo/Templates/UIxTopnavToolbar.wox 
   patch -R /usr/lib/GNUstep/SOGo/Templates/UIxTopnavToolbar.wox < /navMailcowBtns.diff;
 fi
 
-# Edulution: Inject SQL groups JavaScript into SOGo UI (BEFORE rsync)
-echo "Injecting SQL groups JavaScript..."
-/inject-js.sh
+# Edulution: Patch Card service for SQL group support
+echo "Patching Card service for SQL group expansion..."
+if [ ! -f /usr/lib/GNUstep/SOGo/WebServerResources/js/Contacts/Card.service.js.orig ]; then
+  # Patch the source file
+  cp /usr/lib/GNUstep/SOGo/WebServerResources/js/Contacts/Card.service.js /usr/lib/GNUstep/SOGo/WebServerResources/js/Contacts/Card.service.js.orig
+  patch /usr/lib/GNUstep/SOGo/WebServerResources/js/Contacts/Card.service.js < /card-sql-groups.patch
+  echo "Card service source patched successfully"
+
+  # Also patch the minified version directly with sed
+  # We'll inject our SQL groups logic into the minified Contacts.services.js
+  CONTACTS_JS="/usr/lib/GNUstep/SOGo/WebServerResources/js/Contacts.services.js"
+
+  if [ -f "$CONTACTS_JS" ]; then
+    # Backup original
+    cp "$CONTACTS_JS" "$CONTACTS_JS.orig"
+
+    # Find and replace the $members function in the minified file
+    # This adds SQL group support before LDAP group check
+    sed -i 's/if(this\.members)return Card\.\$q\.when(this\.members);/if(this.members)return Card.$q.when(this.members);var isSQLGroup=this.isgroup||(this.isGroup\&\&this.isGroup===1);if(isSQLGroup){var _this=this,email=this.c_uid||this.id,url="\/group-resolver.php?email="+encodeURIComponent(email)+"\&action=members";return console.log("[SQL Groups] Fetching:",email),Card.$http.get(url).then(function(response){if(response.data.members\&\&Array.isArray(response.data.members))return _this.members=_.map(response.data.members,function(member){return new Card(member)}),console.log("[SQL Groups] Loaded",_this.members.length,"members"),_this.members;return Card.$q.reject("Invalid members response")}).catch(function(error){return console.error("[SQL Groups] Failed:",error),Card.$q.reject("Failed to fetch SQL group members")})}/' "$CONTACTS_JS"
+
+    # Inject $http into Card factory dependencies
+    sed -i 's/Card\.\$factory=\["$q","$timeout","sgSettings"/Card.$factory=["$q","$timeout","$http","sgSettings"/' "$CONTACTS_JS"
+    sed -i 's/function(\$q,\$timeout,Settings/function($q,$timeout,$http,Settings/' "$CONTACTS_JS"
+    sed -i 's/\$q:\$q,\$timeout:\$timeout,\$Preferences/\$q:$q,$timeout:$timeout,$http:$http,$Preferences/' "$CONTACTS_JS"
+
+    echo "Minified Contacts.services.js patched successfully"
+  fi
+else
+  echo "Card service already patched"
+fi
 
 # Rename custom logo, if any
 [[ -f /etc/sogo/sogo-full.svg ]] && mv /etc/sogo/sogo-full.svg /etc/sogo/custom-fulllogo.svg

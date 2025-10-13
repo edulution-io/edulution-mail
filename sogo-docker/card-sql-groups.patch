@@ -1,0 +1,98 @@
+--- Card.service.js.orig	2025-01-01 00:00:00.000000000 +0000
++++ Card.service.js	2025-01-01 00:00:00.000000000 +0000
+@@ -38,12 +38,13 @@
+    * @memberof Card
+    * @desc The factory we'll use to register with Angular.
+    * @returns the Card constructor
+    */
+-  Card.$factory = ['$q', '$timeout', 'sgSettings', 'sgCard_STATUS', 'encodeUriFilter', 'Resource', 'Preferences', function($q, $timeout, Settings, Card_STATUS, encodeUriFilter, Resource, Preferences) {
++  Card.$factory = ['$q', '$timeout', '$http', 'sgSettings', 'sgCard_STATUS', 'encodeUriFilter', 'Resource', 'Preferences', function($q, $timeout, $http, Settings, Card_STATUS, encodeUriFilter, Resource, Preferences) {
+     angular.extend(Card, {
+       STATUS: Card_STATUS,
+       encodeUri: encodeUriFilter,
+       $resource: new Resource(Settings.activeUser('folderURL') + 'Contacts', Settings.activeUser()),
+       $q: $q,
+       $timeout: $timeout,
++      $http: $http,
+       $Preferences: Preferences
+     });
+@@ -243,23 +244,77 @@
+   /**
+    * @function $members
+    * @memberof Card.prototype
+-   * @desc Fetch members of the LDAP group.
++   * @desc Fetch members of the LDAP group or SQL group.
+    * @returns a promise that resolves with the members
+    */
+   Card.prototype.$members = function() {
+     var _this = this;
+
++    // If members already loaded, return them
+     if (this.members)
+       return Card.$q.when(this.members);
+
++    // Check if this is a SQL group (isGroup=1 from edulution_gal)
++    var isSQLGroup = this.isgroup || (this.isGroup && this.isGroup === 1);
++
++    if (isSQLGroup) {
++      // Use custom PHP middleware for SQL groups
++      var email = this.c_uid || this.id;
++      var url = '/group-resolver.php?email=' + encodeURIComponent(email) + '&action=members';
++
++      console.log('[SQL Groups] Fetching members for SQL group:', email);
++
++      return Card.$http.get(url).then(function(response) {
++        var data = response.data;
++
++        if (data.members && Array.isArray(data.members)) {
++          _this.members = _.map(data.members, function(member) {
++            return new Card(member);
++          });
++          console.log('[SQL Groups] Loaded', _this.members.length, 'members for', email);
++          return _this.members;
++        } else {
++          console.error('[SQL Groups] Invalid response format:', data);
++          return Card.$q.reject("Invalid members response");
++        }
++      }).catch(function(error) {
++        console.error('[SQL Groups] Failed to fetch members:', error);
++        return Card.$q.reject("Failed to fetch SQL group members");
++      });
++    }
++
++    // Fall back to LDAP group expansion
+     if (this.$isGroup({expandable: true})) {
+       return Card.$resource.fetch(this.$path(), 'members').then(function(data) {
+         _this.members = _.map(data.members, function(member) {
+           return new Card(member);
+         });
+         return _this.members;
+       });
+     }
+
+     return Card.$q.reject("Card " + this.id + " is not an LDAP group");
+   };
++
++  /**
++   * @function $isGroup (patched for SQL groups)
++   * @memberof Card.prototype
++   * @desc Check if this card is a group (LDAP or SQL)
++   * @returns true if this is a group
++   */
++  var original$isGroup = Card.prototype.$isGroup;
++  Card.prototype.$isGroup = function(options) {
++    // Check if this is a SQL group (isGroup=1 from edulution_gal)
++    var isSQLGroup = this.isgroup || (this.isGroup && this.isGroup === 1);
++
++    if (isSQLGroup) {
++      // SQL groups are always expandable
++      console.log('[SQL Groups] Detected SQL group:', this.c_uid || this.id);
++      return true;
++    }
++
++    // Fall back to original LDAP group check
++    return original$isGroup.call(this, options);
++  };
+
+   /**
+    * @function $save

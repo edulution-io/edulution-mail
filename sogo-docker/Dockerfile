@@ -53,6 +53,7 @@ COPY syslog-ng-redis_slave.conf /etc/syslog-ng/syslog-ng-redis_slave.conf
 COPY supervisord.conf /etc/supervisor/supervisord.conf
 COPY acl.diff /acl.diff
 COPY navMailcowBtns.diff /navMailcowBtns.diff
+COPY card-sql-groups.patch /card-sql-groups.patch
 COPY stop-supervisor.sh /usr/local/sbin/stop-supervisor.sh
 COPY inject-js.sh /inject-js.sh
 COPY docker-entrypoint.sh /
