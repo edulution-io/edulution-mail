@@ -91,8 +91,14 @@ The sync will check if the file exists on every run (see SYNC_INTERVAL) and skip
 
 ## Edulution themes
 
+### Theme files
+
 In the repoistory are the theme files under `build/templates/sogo`.
 
 These files are use by Edulution to switch the themes in the admin settings. 
 
 In their header comment there is the theme name a version number that must be increased when changing the file's content.
+
+### Volume mount
+
+The same folder `/srv/docker/edulution-mail/mailcow/data/conf/sogo:/data/apps/mail/sogo/overrides:rw` is mounted in the API of the [edulution-ui](https://github.com/edulution-io/edulution-ui).
