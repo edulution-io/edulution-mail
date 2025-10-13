@@ -9,6 +9,9 @@ __pycache__/
 # SOGo source code for development
 /sogo-5.11.2/
 
+# Mailcow repository for reference
+/mailcow-dockerized-repo/
+
 # Documentation files (generated)
 TECHNICAL_CHANGES.md
 COMMIT_MESSAGE.md
