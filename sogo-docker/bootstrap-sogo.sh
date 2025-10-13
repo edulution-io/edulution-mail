@@ -148,16 +148,16 @@ if patch -R -sfN --dry-run /usr/lib/GNUstep/SOGo/Templates/UIxTopnavToolbar.wox 
   patch -R /usr/lib/GNUstep/SOGo/Templates/UIxTopnavToolbar.wox < /navMailcowBtns.diff;
 fi
 
+# Edulution: Inject SQL groups JavaScript into SOGo UI (BEFORE rsync)
+echo "Injecting SQL groups JavaScript..."
+/inject-js.sh
+
 # Rename custom logo, if any
 [[ -f /etc/sogo/sogo-full.svg ]] && mv /etc/sogo/sogo-full.svg /etc/sogo/custom-fulllogo.svg
 
 # Rsync web content
 echo "Syncing web content with named volume"
 rsync -a /usr/lib/GNUstep/SOGo/. /sogo_web/
-
-# Edulution: Inject SQL groups JavaScript into SOGo UI (AFTER rsync)
-echo "Injecting SQL groups JavaScript..."
-/inject-js.sh
 
 # Chown backup path
 chown -R sogo:sogo /sogo_backup
