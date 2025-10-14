@@ -118,6 +118,10 @@ while read -r line gal
   # Generate alternative LDAP authentication dict, when SQL authentication fails
   # This will nevertheless read attributes from LDAP
   /etc/sogo/plist_ldap.sh ${line} ${gal} >> /var/lib/sogo/GNUstep/Defaults/sogod.plist
+
+  # Edulution: Add LDAP groups for native group expansion
+  /plist_ldap_groups.sh ${line} ${gal} >> /var/lib/sogo/GNUstep/Defaults/sogod.plist
+
   echo "            </array>
         </dict>" >> /var/lib/sogo/GNUstep/Defaults/sogod.plist
 done < <(mariadb --skip-ssl --socket=/var/run/mysqld/mysqld.sock -u ${DBUSER} -p${DBPASS} ${DBNAME} -e "SELECT domain, CASE gal WHEN '1' THEN 'YES' ELSE 'NO' END AS gal FROM domain;" -B -N)
