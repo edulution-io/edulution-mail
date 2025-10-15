@@ -36,7 +36,7 @@ logger = logging.getLogger("ldap-sql-bridge")
 # DATABASE CONNECTION
 # ------------------------------------------------------------
 DB_CONFIG = {
-    'unix_socket': '/var/run/mysqld/mysqld.sock',
+    'host': 'mysql',  # Connect via Docker network hostname
     'user': os.getenv('DBUSER', 'mailcow'),
     'password': os.getenv('DBPASS', ''),
     'database': os.getenv('DBNAME', 'mailcow')
