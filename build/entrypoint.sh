@@ -226,12 +226,20 @@ configure_sogo_gal() {
         sleep 5
     done
     
-    # Check if already configured
-    if grep -q "id = \"edulution\"" "$SOGO_CONF" 2>/dev/null; then
-        log_info "edulution GAL already configured"
+    # Check if LDAP config already exists (new version)
+    if grep -q "ldap://edulution:3890" "$SOGO_CONF" 2>/dev/null; then
+        log_info "LDAP GAL already configured"
         return 0
     fi
-    
+
+    # Check if old SQL config exists and needs migration
+    if grep -q "id = \"edulution\"" "$SOGO_CONF" 2>/dev/null && grep -q "type = sql" "$SOGO_CONF" 2>/dev/null; then
+        log_warning "Migrating from SQL GAL to LDAP GAL"
+        # Remove old SQL config
+        cp "$SOGO_CONF" "${SOGO_CONF}.bak.sql.$(date +%Y%m%d%H%M%S)"
+        sed -i '/SOGoUserSources = (/,/^  );/d' "$SOGO_CONF"
+    fi
+
     log_info "Adding LDAP GAL configuration for group expansion"
 
     # Create LDAP-based GAL configuration
@@ -274,13 +282,7 @@ configure_sogo_gal() {
   );
 
   SOGoLDAPGroupExpansionEnabled = YES;"
-    
-    # Check if SOGoUserSources already exists
-    if grep -q "SOGoUserSources" "$SOGO_CONF"; then
-        log_warning "SOGoUserSources already exists - manual configuration needed"
-        return 1
-    fi
-    
+
     # Backup and modify configuration
     cp "$SOGO_CONF" "${SOGO_CONF}.bak.$(date +%Y%m%d%H%M%S)"
     
