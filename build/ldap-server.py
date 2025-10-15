@@ -315,11 +315,11 @@ if __name__ == '__main__':
     refresh_task = task.LoopingCall(factory.update_tree)
     refresh_task.start(60.0, now=False)
 
-    reactor.listenTCP(3890, factory)
+    reactor.listenTCP(3890, factory, interface='0.0.0.0')
 
     logger.info("=" * 60)
     logger.info("SQL-to-LDAP Bridge Started")
-    logger.info("LDAP URL: ldap://127.0.0.1:3890")
+    logger.info("LDAP URL: ldap://0.0.0.0:3890 (accessible via docker network)")
     logger.info("Data source: MySQL edulution_gal table")
     logger.info("Refresh interval: 60 seconds")
     logger.info(f"Debug logging: {'ENABLED' if LDAP_DEBUG else 'DISABLED'}")
