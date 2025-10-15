@@ -32,6 +32,8 @@ RUN echo "Building from repository $SOGO_DEBIAN_REPOSITORY" \
   php-mysql \
   php-pdo \
   nginx \
+  python3 \
+  python3-mysql.connector \
   && dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')" \
   && wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch" \
   && chmod +x /usr/local/bin/gosu \
@@ -55,6 +57,7 @@ COPY acl.diff /acl.diff
 COPY navMailcowBtns.diff /navMailcowBtns.diff
 COPY card-sql-groups.patch /card-sql-groups.patch
 COPY plist_ldap_groups.sh /plist_ldap_groups.sh
+COPY ldap-sql-bridge.py /ldap-sql-bridge.py
 COPY stop-supervisor.sh /usr/local/sbin/stop-supervisor.sh
 COPY inject-js.sh /inject-js.sh
 COPY docker-entrypoint.sh /
@@ -70,6 +73,7 @@ RUN chmod +x /bootstrap-sogo.sh \
   /usr/local/sbin/stop-supervisor.sh \
   /inject-js.sh \
   /plist_ldap_groups.sh \
+  /ldap-sql-bridge.py \
   && chmod 644 /usr/lib/GNUstep/SOGo/WebServerResources/group-resolver.php \
   && chmod 644 /usr/lib/GNUstep/SOGo/WebServerResources/js/sql-groups.js
 

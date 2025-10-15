@@ -6,10 +6,10 @@
 domain="$1"
 gal_status="$2"
 
-# LDAP credentials from linuxmuster
-LDAP_HOST="10.0.0.1"
-LDAP_BIND_DN="CN=edulutionui-binduser,OU=Management,OU=GLOBAL,DC=linuxmuster,DC=lan"
-LDAP_BIND_PASS="MAvNhbqBHyDcPY)3qygC8"
+# Point to our internal SQL-to-LDAP bridge
+LDAP_HOST="127.0.0.1:3893"
+LDAP_BIND_DN="cn=admin,dc=edulution,dc=local"
+LDAP_BIND_PASS="any"
 
 echo "                <dict>
                     <key>type</key>
@@ -31,9 +31,9 @@ echo "                <dict>
                     <string>${LDAP_BIND_PASS}</string>
 
                     <key>baseDN</key>
-                    <string>OU=Groups,OU=Global,DC=linuxmuster,DC=lan</string>
+                    <string>ou=groups,dc=edulution,dc=local</string>
                     <key>filter</key>
-                    <string>(objectClass=group)</string>
+                    <string>(objectClass=groupOfNames)</string>
 
                     <key>IDFieldName</key>
                     <string>cn</string>
@@ -48,7 +48,7 @@ echo "                <dict>
 
                     <key>GroupObjectClasses</key>
                     <array>
-                        <string>group</string>
+                        <string>groupOfNames</string>
                     </array>
 
                     <key>listRequiresDot</key>
