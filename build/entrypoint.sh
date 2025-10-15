@@ -322,9 +322,10 @@ start_ldap_server() {
     export DBUSER=$DBUSER
     export DBPASS=$DBPASS
     export DBNAME=$DBNAME
-    export LDAP_DEBUG=${LDAP_DEBUG:-false}
+    export LDAP_DEBUG=${LDAP_DEBUG:-true}  # Enable debug by default for testing
 
-    log_info "Starting LDAP server on port 3890"
+    log_info "Starting LDAP server on port 3890 (Debug: $LDAP_DEBUG)"
+    log_info "DB Config: host=mysql, user=$DBUSER, database=$DBNAME"
     python /app/ldap-server.py >> /app/ldap-server.log 2>&1 &
     LDAP_PID=$!
 
@@ -333,8 +334,10 @@ start_ldap_server() {
 
     if kill -0 $LDAP_PID 2>/dev/null; then
         log_success "LDAP server started (PID: $LDAP_PID)"
+        log_info "LDAP server log: /app/ldap-server.log"
     else
         log_error "LDAP server failed to start"
+        log_error "Check log: docker exec edulution-mail cat /app/ldap-server.log"
     fi
 }
 

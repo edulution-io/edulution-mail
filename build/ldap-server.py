@@ -55,9 +55,18 @@ def build_ldap_tree_from_sql():
     start_time = time.time()
 
     try:
+        # Log DB connection details (with masked password)
+        if LDAP_DEBUG:
+            masked_config = DB_CONFIG.copy()
+            masked_config['password'] = '***' if DB_CONFIG.get('password') else '(empty)'
+            logger.debug(f"Connecting to MySQL: {masked_config}")
+
         # Connect to MySQL
         db = mysql.connector.connect(**DB_CONFIG)
         cursor = db.cursor(dictionary=True)
+
+        if LDAP_DEBUG:
+            logger.debug("✓ MySQL connection established")
 
         # Get all users (isGroup IS NULL or isGroup = 0)
         if LDAP_DEBUG:
