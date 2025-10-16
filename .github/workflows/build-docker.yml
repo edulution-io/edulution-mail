@@ -1,9 +1,9 @@
 name: Build docker image
 
 on:
-  
+
   push:
-    branches: ["main", "dev"]
+    branches: ["main", "dev", "feature/versioning-system"]
 
   workflow_dispatch:
 
@@ -51,7 +51,9 @@ jobs:
           if [[ "${{ github.ref_name }}" == "main" ]]; then
             echo "tags=ghcr.io/${{ github.repository }}:${VERSION},ghcr.io/${{ github.repository }}:main,ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref_name }}" == "dev" ]]; then
-            echo "tags=ghcr.io/${{ github.repository }}:dev" >> $GITHUB_OUTPUT
+            echo "tags=ghcr.io/${{ github.repository }}:${VERSION}-dev,ghcr.io/${{ github.repository }}:dev" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_name }}" == "feature/versioning-system" ]]; then
+            echo "tags=ghcr.io/${{ github.repository }}:${VERSION}-test,ghcr.io/${{ github.repository }}:versioning-test" >> $GITHUB_OUTPUT
           else
             echo "tags=ghcr.io/${{ github.repository }}:${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi

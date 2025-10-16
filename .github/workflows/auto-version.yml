@@ -2,7 +2,7 @@ name: Auto Version Bump
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "dev", "feature/versioning-system"]
   workflow_dispatch:
     inputs:
       version:
@@ -58,7 +58,29 @@ jobs:
 
       - name: Create Git tag
         if: steps.check-commit.outputs.skip == 'false'
+        id: create-tag
         run: |
           VERSION=$(cat VERSION)
           git tag -a "v${VERSION}" -m "Release version ${VERSION}"
           git push origin "v${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        if: steps.check-commit.outputs.skip == 'false' && github.ref_name == 'main'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.create-tag.outputs.version }}
+          release_name: Release v${{ steps.create-tag.outputs.version }}
+          body: |
+            ## Release v${{ steps.create-tag.outputs.version }}
+
+            Automated release created by version bump workflow.
+
+            ### Docker Images
+            - `ghcr.io/${{ github.repository }}:${{ steps.create-tag.outputs.version }}`
+            - `ghcr.io/${{ github.repository }}:latest`
+            - `ghcr.io/${{ github.repository }}:main`
+          draft: false
+          prerelease: false
