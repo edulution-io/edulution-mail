@@ -2,7 +2,10 @@
 
 # Script to bump version in VERSION file
 # Usage:
-#   ./bump-version.sh           # Bumps minor version (1.0.0 -> 1.1.0)
+#   ./bump-version.sh           # Bumps patch version (1.0.0 -> 1.0.1)
+#   ./bump-version.sh patch     # Bumps patch version (1.0.0 -> 1.0.1)
+#   ./bump-version.sh minor     # Bumps minor version (1.0.0 -> 1.1.0)
+#   ./bump-version.sh major     # Bumps major version (1.0.0 -> 2.0.0)
 #   ./bump-version.sh 2.0.0     # Sets specific version
 
 set -e
@@ -15,12 +18,20 @@ if [ ! -f "$VERSION_FILE" ]; then
 fi
 
 CURRENT_VERSION=$(cat "$VERSION_FILE")
+IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
 
-if [ -z "$1" ]; then
-    # Auto-increment minor version
-    IFS='.' read -r major minor patch <<< "$CURRENT_VERSION"
-    NEW_VERSION="$major.$((minor + 1)).$patch"
-    echo "Auto-bumping version: $CURRENT_VERSION -> $NEW_VERSION"
+if [ -z "$1" ] || [ "$1" == "patch" ]; then
+    # Auto-increment patch version
+    NEW_VERSION="$major.$minor.$((patch + 1))"
+    echo "Bumping PATCH version: $CURRENT_VERSION -> $NEW_VERSION"
+elif [ "$1" == "minor" ]; then
+    # Increment minor version, reset patch
+    NEW_VERSION="$major.$((minor + 1)).0"
+    echo "Bumping MINOR version: $CURRENT_VERSION -> $NEW_VERSION"
+elif [ "$1" == "major" ]; then
+    # Increment major version, reset minor and patch
+    NEW_VERSION="$((major + 1)).0.0"
+    echo "Bumping MAJOR version: $CURRENT_VERSION -> $NEW_VERSION"
 else
     # Set specific version
     NEW_VERSION="$1"

@@ -34,8 +34,17 @@ jobs:
           COMMIT_MSG=$(git log -1 --pretty=%B)
           if [[ "$COMMIT_MSG" == *"[skip-version]"* ]] || [[ "$COMMIT_MSG" == *"chore: bump version"* ]]; then
             echo "skip=true" >> $GITHUB_OUTPUT
+            echo "bump_type=none" >> $GITHUB_OUTPUT
           else
             echo "skip=false" >> $GITHUB_OUTPUT
+            # Detect version bump type from commit message
+            if [[ "$COMMIT_MSG" =~ MAJOR:|BREAKING ]]; then
+              echo "bump_type=major" >> $GITHUB_OUTPUT
+            elif [[ "$COMMIT_MSG" =~ MINOR:|feat:|feature: ]]; then
+              echo "bump_type=minor" >> $GITHUB_OUTPUT
+            else
+              echo "bump_type=patch" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Bump version
@@ -45,7 +54,7 @@ jobs:
           if [ -n "${{ github.event.inputs.version }}" ]; then
             ./scripts/bump-version.sh "${{ github.event.inputs.version }}"
           else
-            ./scripts/bump-version.sh
+            ./scripts/bump-version.sh "${{ steps.check-commit.outputs.bump_type }}"
           fi
 
       - name: Commit and push version bump
