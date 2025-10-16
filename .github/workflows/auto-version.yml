@@ -1,0 +1,64 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Specific version to set (e.g., 2.0.0). Leave empty for auto-increment.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  version-bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check if commit is version bump
+        id: check-commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ "$COMMIT_MSG" == *"[skip-version]"* ]] || [[ "$COMMIT_MSG" == *"chore: bump version"* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        if: steps.check-commit.outputs.skip == 'false'
+        run: |
+          chmod +x scripts/bump-version.sh
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            ./scripts/bump-version.sh "${{ github.event.inputs.version }}"
+          else
+            ./scripts/bump-version.sh
+          fi
+
+      - name: Commit and push version bump
+        if: steps.check-commit.outputs.skip == 'false'
+        run: |
+          NEW_VERSION=$(cat VERSION)
+          git add VERSION
+          git commit -m "chore: bump version to ${NEW_VERSION} [skip-version]"
+          git push
+
+      - name: Create Git tag
+        if: steps.check-commit.outputs.skip == 'false'
+        run: |
+          VERSION=$(cat VERSION)
+          git tag -a "v${VERSION}" -m "Release version ${VERSION}"
+          git push origin "v${VERSION}"

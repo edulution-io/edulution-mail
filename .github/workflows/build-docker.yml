@@ -22,6 +22,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Read version
+        id: version
+        run: |
+          if [ -f VERSION ]; then
+            VERSION=$(cat VERSION)
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
         with:
@@ -37,8 +47,9 @@ jobs:
       - name: Determine Docker tags
         id: docker-tags
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
           if [[ "${{ github.ref_name }}" == "main" ]]; then
-            echo "tags=ghcr.io/${{ github.repository }}:main,ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
+            echo "tags=ghcr.io/${{ github.repository }}:${VERSION},ghcr.io/${{ github.repository }}:main,ghcr.io/${{ github.repository }}:latest" >> $GITHUB_OUTPUT
           elif [[ "${{ github.ref_name }}" == "dev" ]]; then
             echo "tags=ghcr.io/${{ github.repository }}:dev" >> $GITHUB_OUTPUT
           else
