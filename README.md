@@ -28,6 +28,22 @@ The login with IMAP, POP3 and SMTP takes place in the dovecot container via a LU
 
 A direct login in SOGO is currently not possible. The login is carried out via the URL "http://<MAILSERVER>/sogo-auth.php" with the GET parameter "token" or the authorization header. The token is then checked via the Edulution Mail API with Keycloak and if successful, you are redirected to the SOGO webmail.
 
+### CardDAV Global Address Books
+
+The global address books (GAL) are available via CardDAV/WebDAV for external clients. This allows integration with mail clients like Thunderbird, Apple Contacts, Android, etc.
+
+**Available address books:**
+- `/carddav/users/` - All users and aliases (read-only)
+- `/carddav/groups/` - All distribution lists/groups (read-only)
+
+**Features:**
+- Automatic synchronization every 60 seconds from the `edulution_gal` MySQL view
+- vCard 3.0 format support
+- Support for all standard CardDAV clients
+- No authentication required (read-only access to public GAL data)
+
+**Setup:** See [CARDDAV-SETUP.md](build/CARDDAV-SETUP.md) for detailed configuration instructions and client setup guides.
+
 ## Environment variables
 
 | Environment variables          | Required?         | Default                                            | Description                               |
@@ -36,6 +52,7 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 | DOMAIN_QUOTA                   | No                | 10240                                              | (MB) The quota for the whole domain. The user quota is reserved. If the total user quota is larger than the domain quota, the sync will be stopped! |
 | GROUPS_TO_SYNC                 | No                | role-schooladministrator,role-teacher,role-student | A comma seperated list of groups of which the users will be synced
 | ENABLE_GAL                     | No                | 1 (YES)                                            | Enable (1) or disable (0) the GAL (Global Address List) |
+| CARDDAV_DEBUG                  | No                | true                                               | Enable (true) or disable (false) debug logging for CardDAV server |
 | SYNC_INTERVAL                  | No                | 300                                                | (seconds) The sync interval for user and groups |
 | SOFT_DELETE_ENABLED            | No                | 1 (YES)                                            | Enable (1) or disable (0) soft deletion for domains and mailboxes |
 | SOFT_DELETE_GRACE_PERIOD       | No                | 2592000                                            | (seconds) Grace period before permanent deletion (default: 30 days) |

@@ -343,6 +343,39 @@ start_ldap_server() {
     fi
 }
 
+# Start CardDAV server
+start_carddav_server() {
+    log_step "Starting CardDAV-to-SQL bridge for global address books"
+
+    source /app/venv/bin/activate
+
+    # Export DB credentials for carddav-server.py
+    export DBUSER=$DBUSER
+    export DBPASS=$DBPASS
+    export DBNAME=$DBNAME
+    export CARDDAV_DEBUG=${CARDDAV_DEBUG:-true}  # Enable debug by default for testing
+
+    log_info "Starting CardDAV server on port 8800 (Debug: $CARDDAV_DEBUG)"
+    log_info "DB Config: host=mysql, user=$DBUSER, database=$DBNAME"
+    log_info "Endpoints:"
+    log_info "  - /carddav/users/  (Benutzer)"
+    log_info "  - /carddav/groups/ (Gruppen)"
+    python /app/carddav-server.py >> /app/carddav-server.log 2>&1 &
+    CARDDAV_PID=$!
+
+    # Wait for CardDAV server to be ready
+    sleep 2
+
+    if kill -0 $CARDDAV_PID 2>/dev/null; then
+        log_success "CardDAV server started (PID: $CARDDAV_PID)"
+        log_info "CardDAV server log: /app/carddav-server.log"
+        log_info "Access via: https://mail.example.com/carddav/users/"
+    else
+        log_error "CardDAV server failed to start"
+        log_error "Check log: docker exec edulution-mail cat /app/carddav-server.log"
+    fi
+}
+
 # Start API and sync services
 start_services() {
     log_step "Starting API and sync services"
@@ -701,6 +734,7 @@ EOF
         set_mailcow_token
         create_edulution_view
         start_ldap_server
+        start_carddav_server
         start_services
         exit 0
     fi
@@ -715,6 +749,7 @@ EOF
     create_edulution_view
     wait_for_mailcow
     start_ldap_server
+    start_carddav_server
     start_services
 }
 

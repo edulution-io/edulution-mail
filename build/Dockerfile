@@ -10,6 +10,7 @@ RUN mkdir -p /app && python3 -m venv /app/venv && /app/venv/bin/pip install pyth
 COPY ./edulution-mailcow-sync /app
 COPY ./templates /templates
 COPY ./ldap-server.py /app/ldap-server.py
+COPY ./carddav-server.py /app/carddav-server.py
 
 COPY ./entrypoint.sh entrypoint.sh
 RUN chmod +x entrypoint.sh
