@@ -133,7 +133,9 @@ SELECT
     ''                                AS ad_aliases,
     ''                                AS ext_acl,
     m.kind                            AS kind,
-    m.multiple_bookings               AS multiple_bookings
+    m.multiple_bookings               AS multiple_bookings,
+    NULL                              AS isGroup,
+    NULL                              AS groupMembers
 FROM mailbox m
 WHERE m.active=1
 
@@ -155,7 +157,9 @@ SELECT
     ''                                AS ad_aliases,
     ''                                AS ext_acl,
     ''                                AS kind,
-    -1                                AS multiple_bookings
+    -1                                AS multiple_bookings,
+    NULL                              AS isGroup,
+    NULL                              AS groupMembers
 FROM alias a
 LEFT JOIN mailbox m ON a.goto = m.username
 WHERE a.active=1
@@ -164,7 +168,7 @@ WHERE a.active=1
 
 UNION ALL
 
--- Verteiler (immer unsichtbar, sogo_visible=0)
+-- Verteiler als Gruppen (LDAP group expansion)
 SELECT
     a.address                         AS c_uid,
     a.domain                          AS domain,
@@ -188,7 +192,9 @@ SELECT
     ''                                AS ad_aliases,
     ''                                AS ext_acl,
     ''                                AS kind,
-    -1                                AS multiple_bookings
+    -1                                AS multiple_bookings,
+    1                                 AS isGroup,
+    REPLACE(a.goto, ',', ' ')         AS groupMembers
 FROM alias a
 WHERE a.active=1
   AND a.sogo_visible=0;
@@ -220,40 +226,63 @@ configure_sogo_gal() {
         sleep 5
     done
     
-    # Check if already configured
-    if grep -q "id = \"edulution\"" "$SOGO_CONF" 2>/dev/null; then
-        log_info "edulution GAL already configured"
+    # Check if LDAP config already exists (new version)
+    if grep -q "ldap://edulution:3890" "$SOGO_CONF" 2>/dev/null; then
+        log_info "LDAP GAL already configured"
         return 0
     fi
-    
-    log_info "Adding edulution GAL configuration"
-    
-    # Create GAL configuration
+
+    # Check if old SQL config exists and needs migration
+    if grep -q "id = \"edulution\"" "$SOGO_CONF" 2>/dev/null && grep -q "type = sql" "$SOGO_CONF" 2>/dev/null; then
+        log_warning "Migrating from SQL GAL to LDAP GAL"
+        # Remove old SQL config
+        cp "$SOGO_CONF" "${SOGO_CONF}.bak.sql.$(date +%Y%m%d%H%M%S)"
+        sed -i '/SOGoUserSources = (/,/^  );/d' "$SOGO_CONF"
+    fi
+
+    log_info "Adding LDAP GAL configuration for group expansion"
+
+    # Create LDAP-based GAL configuration
     GAL_CONFIG="  SOGoUserSources = (
     {
-      type = sql;
-      id = \"edulution\";
-      isAddressBook = YES;
-      canAuthenticate = NO;
-      displayName = \"GAL edulution\";
-
-      viewURL = \"mysql://${DBUSER}:${DBPASS}@mysql/${DBNAME}/edulution_gal\";
-
-      UIDFieldName   = \"c_uid\";
-      CNFieldName    = \"c_cn\";
-      IDFieldName    = \"c_uid\";
+      type = ldap;
+      id = \"users\";
+      CNFieldName = cn;
+      IDFieldName = uid;
+      UIDFieldName = uid;
+      IMAPHostFieldName = \"\";
+      SearchFieldNames = (cn, sn, displayName, mail, telephoneNumber);
       MailFieldNames = (\"mail\");
-
+      baseDN = \"ou=users,dc=schule,dc=lan\";
+      bindDN = \"\";
+      bindPassword = \"\";
+      canAuthenticate = NO;
+      displayName = \"Benutzer\";
+      hostname = \"ldap://edulution:3890\";
+      isAddressBook = YES;
       listRequiresDot = NO;
+    },
+    {
+      type = ldap;
+      id = \"groups\";
+      CNFieldName = cn;
+      IDFieldName = cn;
+      UIDFieldName = cn;
+      MailFieldNames = (\"mail\", \"rfc822MailMember\");
+      baseDN = \"ou=groups,dc=schule,dc=lan\";
+      bindDN = \"\";
+      bindPassword = \"\";
+      canAuthenticate = YES;
+      displayName = \"Gruppen\";
+      hostname = \"ldap://edulution:3890\";
+      lookupFields = (\"*\", \"uniqueMember\");
+      isAddressBook = YES;
+      GroupObjectClasses = (\"groupOfUniqueNames\");
     }
-  );"
-    
-    # Check if SOGoUserSources already exists
-    if grep -q "SOGoUserSources" "$SOGO_CONF"; then
-        log_warning "SOGoUserSources already exists - manual configuration needed"
-        return 1
-    fi
-    
+  );
+
+  SOGoLDAPGroupExpansionEnabled = YES;"
+
     # Backup and modify configuration
     cp "$SOGO_CONF" "${SOGO_CONF}.bak.$(date +%Y%m%d%H%M%S)"
     
@@ -285,17 +314,46 @@ configure_sogo_gal() {
     fi
 }
 
+# Start LDAP server
+start_ldap_server() {
+    log_step "Starting LDAP-to-SQL bridge for SOGo group expansion"
+
+    source /app/venv/bin/activate
+
+    # Export DB credentials for ldap-server.py
+    export DBUSER=$DBUSER
+    export DBPASS=$DBPASS
+    export DBNAME=$DBNAME
+    export LDAP_DEBUG=${LDAP_DEBUG:-true}  # Enable debug by default for testing
+
+    log_info "Starting LDAP server on port 3890 (Debug: $LDAP_DEBUG)"
+    log_info "DB Config: host=mysql, user=$DBUSER, database=$DBNAME"
+    python /app/ldap-server.py >> /app/ldap-server.log 2>&1 &
+    LDAP_PID=$!
+
+    # Wait for LDAP server to be ready
+    sleep 2
+
+    if kill -0 $LDAP_PID 2>/dev/null; then
+        log_success "LDAP server started (PID: $LDAP_PID)"
+        log_info "LDAP server log: /app/ldap-server.log"
+    else
+        log_error "LDAP server failed to start"
+        log_error "Check log: docker exec edulution-mail cat /app/ldap-server.log"
+    fi
+}
+
 # Start API and sync services
 start_services() {
     log_step "Starting API and sync services"
-    
+
     source /app/venv/bin/activate
-    
+
     log_info "Starting API service"
     python /app/api.py 2>&1 >> /app/log.log &
-    
+
     sleep 5
-    
+
     log_info "Starting sync service"
     python /app/sync.py
 }
@@ -636,16 +694,17 @@ EOF
     # Check if Mailcow is already running
     if docker compose --project-directory "${MAILCOW_PATH}/mailcow/" ps | grep -q 'mailcow'; then
         log_warning "Mailcow is already running - only starting API and sync services"
-        
+
         ensure_sogo_files
         configure_sogo_gal
         apply_docker_network
         set_mailcow_token
         create_edulution_view
+        start_ldap_server
         start_services
         exit 0
     fi
-    
+
     # Full initialization
     init_mailcow
     apply_templates
@@ -655,6 +714,7 @@ EOF
     set_mailcow_token
     create_edulution_view
     wait_for_mailcow
+    start_ldap_server
     start_services
 }
 

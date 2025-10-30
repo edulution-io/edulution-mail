@@ -153,7 +153,7 @@ class EdulutionMailcowSync:
         logging.info("* 3. Syncing deltas to mailcow")
 
         # 1. Process deactivations and deletions
-        # self._processDeactivationsAndDeletions(domainList, mailboxList, aliasList, filterList)
+        #self._processDeactivationsAndDeletions(domainList, mailboxList, aliasList, filterList)
 
         # 2. Domain(s) add and update
 
