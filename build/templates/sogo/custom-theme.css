@@ -1,5 +1,5 @@
 /* @theme edulution-dark
-   @version 0.1.3
+   @version 0.1.5
 */
 
 :root {
@@ -79,10 +79,16 @@
     --dark-muted-dialog: #1e293b;
 }
 
-@media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
-  .md-toolbar-tools {
-    margin-right: 50px !important;
-  }
+md-fab-speed-dial {
+    md-fab-actions {
+        button.md-button.md-fab[ng-click="mailbox.newMessage($event, true)"] {
+            width: 0px;
+            height: 0px;
+            display: none;
+            opacity: 0;
+            
+        }
+    }
 }
 
 md-dialog[ui-view=maileditor] {
@@ -115,6 +121,12 @@ md-dialog[ui-view=maileditor] {
     }
 
     form {
+        @media (min-width: 0px) and (max-width: 767px) and (orientation: portrait) {
+            md-toolbar {
+                padding-right: 50px !important;
+            }
+        }
+
         md-dialog-content {
             md-input-container {
                 sg-ckeditor {
