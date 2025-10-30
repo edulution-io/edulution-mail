@@ -79,12 +79,6 @@
     --dark-muted-dialog: #1e293b;
 }
 
-@media (min-width: 0px) and (max-width: 959px) and (orientation: portrait) {
-  .md-toolbar-tools {
-    margin-right: 50px !important;
-  }
-}
-
 md-fab-speed-dial {
     md-fab-actions {
         button.md-button.md-fab[ng-click="mailbox.newMessage($event, true)"] {
