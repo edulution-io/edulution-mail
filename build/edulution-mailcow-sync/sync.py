@@ -134,11 +134,18 @@ class EdulutionMailcowSync:
             if not self._addDomain(maildomain, domainList):
                 continue
 
+            # If soft-delete is enabled and group exists, process even with 0 members (to trigger soft-delete)
             if len(membermails) == 0:
-                logging.debug(f"    -> Mailinglist {mail} has no members, skipping!")
-                continue
+                if self._config.SOFT_DELETE_ENABLED and mail in aliasList._all:
+                    logging.warning(f"    -> Mailinglist {mail} has no members from Keycloak, but exists in Mailcow - processing with soft-delete")
+                    # Process with empty member list to trigger soft-delete tracking
+                    self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description, track_member_changes = True)
+                else:
+                    logging.debug(f"    -> Mailinglist {mail} has no members, skipping!")
+                    continue
+            else:
+                self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description, track_member_changes = True)
 
-            self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description)
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
 
         if domainList.queuesAreEmpty() and mailboxList.queuesAreEmpty() and aliasList.queuesAreEmpty() and filterList.queuesAreEmpty():
@@ -373,8 +380,32 @@ class EdulutionMailcowSync:
 
         return True
 
-    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1, alias_description: str = "") -> bool:
-        goto_targets = ",".join(goto) if isinstance(goto, list) else goto
+    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1, alias_description: str = "", track_member_changes: bool = False) -> bool:
+        # Convert goto to list if needed
+        new_members = goto if isinstance(goto, list) else [goto]
+
+        # If soft-delete is enabled and this is a group alias (sogo_visible=0), track member changes
+        if track_member_changes and self._config.SOFT_DELETE_ENABLED and sogo_visible == 0:
+            # Get current members from Mailcow if alias exists
+            current_members = []
+            if alias in aliasList._all:
+                current_goto = aliasList._all[alias].get("goto", "")
+                if current_goto:
+                    current_members = [m.strip() for m in current_goto.split(",")]
+
+            # Track member changes and get final member list (including grace period members)
+            final_members = self.deactivationTracker.trackAliasMemberChanges(
+                alias_address=alias,
+                current_members=current_members,
+                new_members=new_members
+            )
+
+            # Use the final member list
+            goto_targets = ",".join(final_members)
+        else:
+            # No tracking, use goto as-is
+            goto_targets = ",".join(new_members) if isinstance(new_members, list) else goto
+
         return aliasList.addElement({
             "address": alias,
             "goto": goto_targets,

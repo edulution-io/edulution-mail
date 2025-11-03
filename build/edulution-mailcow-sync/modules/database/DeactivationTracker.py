@@ -14,7 +14,8 @@ class DeactivationTracker:
             "domains": {},
             "mailboxes": {},
             "aliases": {},
-            "filters": {}
+            "filters": {},
+            "alias_members": {}
         }
         self.load()
     
@@ -129,3 +130,63 @@ class DeactivationTracker:
             elif not original_description:
                 return deletion_marker
         return original_description
+
+    def trackAliasMemberChanges(self, alias_address: str, current_members: list, new_members: list) -> list:
+        """
+        Track changes to alias members with soft-delete logic.
+
+        Args:
+            alias_address: Email address of the alias/group
+            current_members: Current list of member emails in Mailcow
+            new_members: New list of member emails from Keycloak
+
+        Returns:
+            List of members that should actually be in the alias (including members still in grace period)
+        """
+        current_set = set(current_members) if current_members else set()
+        new_set = set(new_members) if new_members else set()
+
+        # Members to add (new members from Keycloak)
+        members_to_add = new_set - current_set
+
+        # Members that are in both (no change needed, reactivate if previously marked)
+        members_still_present = current_set & new_set
+
+        # Members that disappeared from Keycloak (mark for removal)
+        members_missing = current_set - new_set
+
+        # Reactivate members that are present again
+        for member in members_still_present:
+            member_key = f"{alias_address}:{member}"
+            if member_key in self.data["alias_members"]:
+                self.reactivate("alias_members", member_key)
+
+        # Mark missing members for deactivation
+        members_to_keep_in_grace = []
+        for member in members_missing:
+            member_key = f"{alias_address}:{member}"
+
+            # Mark for deactivation (grace period is 0 for alias members, we only use mark count)
+            reached_threshold = self.markForDeactivation("alias_members", member_key, 0)
+
+            # If threshold not yet reached, keep the member in the alias
+            if not reached_threshold:
+                members_to_keep_in_grace.append(member)
+                logging.info(f"    -> Keeping member {member} in alias {alias_address} during grace period ({self.getMarkCount('alias_members', member_key)}/{self.mark_count_threshold})")
+            else:
+                logging.info(f"    -> Removing member {member} from alias {alias_address} after {self.mark_count_threshold} marks")
+                # Clean up from tracker after removal
+                self.removeDeleted("alias_members", member_key)
+
+        # New members to add (from Keycloak)
+        for member in members_to_add:
+            logging.info(f"    -> Adding new member {member} to alias {alias_address}")
+
+        # Build final member list
+        final_members = list(new_set) + members_to_keep_in_grace
+
+        # Warning if group becomes empty after soft-delete
+        if len(final_members) == 0 and len(current_members) > 0:
+            logging.warning(f"    -> Group {alias_address} will become empty (all {len(current_members)} members removed after grace period)")
+
+        return final_members

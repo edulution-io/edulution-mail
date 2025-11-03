@@ -13,6 +13,7 @@ PERFORMANCE NOTES for large deployments (2000+ users):
 import logging
 import os
 import time
+import hashlib
 import mysql.connector
 from twisted.internet import reactor, task
 from twisted.internet.protocol import Factory
@@ -42,15 +43,16 @@ DB_CONFIG = {
     'database': os.getenv('DBNAME', 'mailcow')
 }
 
-# Global LDAP tree
+# Global LDAP tree and cache
 ldap_root = None
+last_data_hash = None
 
 # ------------------------------------------------------------
 # BUILD LDAP TREE FROM MYSQL
 # ------------------------------------------------------------
 def build_ldap_tree_from_sql():
     """Query MySQL edulution_gal and build LDAP tree"""
-    global ldap_root
+    global ldap_root, last_data_hash
 
     start_time = time.time()
 
@@ -69,6 +71,7 @@ def build_ldap_tree_from_sql():
             logger.debug("✓ MySQL connection established")
 
         # Get all users (isGroup IS NULL or isGroup = 0)
+        # NOTE: Uses index on (isGroup, mail) for optimal performance
         if LDAP_DEBUG:
             logger.debug("Querying users from edulution_gal...")
         query_start = time.time()
@@ -77,7 +80,6 @@ def build_ldap_tree_from_sql():
             FROM edulution_gal
             WHERE (isGroup IS NULL OR isGroup = 0)
             AND mail IS NOT NULL
-            ORDER BY c_uid
         """)
         users = cursor.fetchall()
         query_time = (time.time() - query_start) * 1000
@@ -90,14 +92,23 @@ def build_ldap_tree_from_sql():
             if len(users) > 5:
                 logger.debug(f"  ... and {len(users) - 5} more users")
 
-        # Create email -> c_uid lookup map
+        # Create email -> c_uid lookup map AND pre-build DNs for performance
         email_to_uid = {}
+        email_to_dn = {}
         for user in users:
-            email_to_uid[user['mail']] = user['c_uid']
+            uid = user['c_uid']
+            email = user['mail']
+            email_to_uid[email] = uid
             # Also map c_uid to itself for flexibility
-            email_to_uid[user['c_uid']] = user['c_uid']
+            email_to_uid[uid] = uid
+
+            # Pre-build DN strings (performance optimization)
+            dn_str = f"uid={uid},ou=users,dc=schule,dc=lan"
+            email_to_dn[email] = dn_str.encode('utf-8')
+            email_to_dn[uid] = dn_str.encode('utf-8')
 
         # Get all groups (isGroup = 1)
+        # NOTE: Uses index on (isGroup, mail) for optimal performance
         if LDAP_DEBUG:
             logger.debug("Querying groups from edulution_gal...")
         query_start = time.time()
@@ -106,7 +117,6 @@ def build_ldap_tree_from_sql():
             FROM edulution_gal
             WHERE isGroup = 1
             AND mail IS NOT NULL
-            ORDER BY c_uid
         """)
         groups = cursor.fetchall()
         query_time = (time.time() - query_start) * 1000
@@ -124,6 +134,23 @@ def build_ldap_tree_from_sql():
 
         cursor.close()
         db.close()
+
+        # Check if data changed using hash (performance optimization)
+        # Create hash from user count, group count, and first/last entries
+        data_fingerprint = f"{len(users)}:{len(groups)}"
+        if users:
+            data_fingerprint += f":{users[0]['c_uid']}:{users[-1]['c_uid']}"
+        if groups:
+            data_fingerprint += f":{groups[0]['c_uid']}:{groups[-1].get('groupMembers', '')[:100]}"
+
+        current_hash = hashlib.md5(data_fingerprint.encode('utf-8')).hexdigest()
+
+        if last_data_hash == current_hash and ldap_root is not None:
+            query_time = (time.time() - start_time) * 1000
+            logger.info(f"⏭ No changes detected, skipping tree rebuild ({query_time:.1f}ms)")
+            return ldap_root
+
+        last_data_hash = current_hash
 
         # Build LDAP tree
         root = ReadOnlyInMemoryLDAPEntry(
@@ -198,18 +225,22 @@ def build_ldap_tree_from_sql():
             # Parse members (space-separated emails)
             member_emails = members_str.strip().split() if members_str else []
 
-            # Build uniqueMember DNs by looking up users
+            # Build uniqueMember DNs by looking up pre-built DNs (performance optimized)
             unique_members = []
+            missing_members = []
+
             for member_email in member_emails:
-                # Resolve email to c_uid
-                resolved_uid = email_to_uid.get(member_email)
-                if resolved_uid:
-                    member_dn = f"uid={resolved_uid},ou=users,dc=schule,dc=lan"
-                    unique_members.append(member_dn.encode('utf-8'))
+                # Direct lookup of pre-built DN (avoids string formatting + encoding)
+                member_dn = email_to_dn.get(member_email)
+                if member_dn:
+                    unique_members.append(member_dn)
                 else:
-                    # User not found - log warning but continue
-                    if LDAP_DEBUG:
-                        logger.warning(f"Group {group_id}: Member {member_email} not found in users")
+                    # User not found - collect for batch warning
+                    missing_members.append(member_email)
+
+            # Log missing members in batch (reduces log spam)
+            if missing_members and LDAP_DEBUG:
+                logger.warning(f"Group {group_id}: {len(missing_members)} member(s) not found: {', '.join(missing_members[:5])}{'...' if len(missing_members) > 5 else ''}")
 
             # If no members, add dummy member (LDAP requires at least one)
             if not unique_members:
