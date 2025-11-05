@@ -26,6 +26,9 @@ class ConfigurationStorage:
         self.SOFT_DELETE_MARK_COUNT = int(os.environ.get("SOFT_DELETE_MARK_COUNT", 10))  # Number of marks before deactivation
         self.PERMANENT_DELETE_ENABLED = int(os.environ.get("PERMANENT_DELETE_ENABLED", 1))  # Enable permanent deletion after grace period
 
+        # Migration mode: Force update of all managed objects to add markers (set FORCE_MARKER_UPDATE=1 for one sync)
+        self.FORCE_MARKER_UPDATE = int(os.environ.get("FORCE_MARKER_UPDATE", 0))
+
         self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False) # entrypoint.sh set this as environment variable
         self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "edu-mailcow-sync")
         self.KEYCLOAK_SECRET_KEY = os.environ.get("KEYCLOAK_SECRET_KEY", False)

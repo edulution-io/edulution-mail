@@ -69,9 +69,18 @@ class EdulutionMailcowSync:
             logging.info("")
             return True
 
+        if self._config.FORCE_MARKER_UPDATE:
+            logging.warning("")
+            logging.warning("========================================================")
+            logging.warning("* FORCE_MARKER_UPDATE MODE ENABLED")
+            logging.warning("* All managed objects will be updated with markers")
+            logging.warning("* Remove FORCE_MARKER_UPDATE=1 after this sync!")
+            logging.warning("========================================================")
+            logging.warning("")
+
         domainList = DomainListStorage()
-        mailboxList = MailboxListStorage(domainList)
-        aliasList = AliasListStorage(domainList)
+        mailboxList = MailboxListStorage(domainList, force_marker_update=self._config.FORCE_MARKER_UPDATE)
+        aliasList = AliasListStorage(domainList, force_marker_update=self._config.FORCE_MARKER_UPDATE)
         filterList = FilterListStorage(domainList)
 
         logging.info("* 1. Loading data from mailcow and keycloak")

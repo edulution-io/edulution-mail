@@ -7,9 +7,10 @@ class MailboxListStorage(ListStorage):
     validityCheckTag = "not-managed"  # Legacy: for backwards compatibility
     managedTag = "edulution-sync-managed"  # New: identifies sync-managed mailboxes
 
-    def __init__(self, domainList: DomainListStorage):
+    def __init__(self, domainList: DomainListStorage, force_marker_update: bool = False):
         super().__init__()
         self._domainList = domainList
+        self._force_marker_update = force_marker_update
 
     def _checkElementValidity(self, element):
         # Check if domain is managed
@@ -36,6 +37,14 @@ class MailboxListStorage(ListStorage):
             return False
         elif key not in currentElement:
             return True
+        elif key == "tags":
+            # Force update if migration mode and tags don't have the marker
+            if self._force_marker_update:
+                current_tags = currentElement.get("tags", []) or []
+                if self.managedTag not in current_tags:
+                    return True
+            # Normal check
+            return currentElement.get("tags") != newValue
         elif key == "quota":
             currentQuota = self._convertBytesToMebibytes(currentElement[key])
             newQuota = int(newValue)

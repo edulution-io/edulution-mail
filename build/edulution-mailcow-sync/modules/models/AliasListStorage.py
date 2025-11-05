@@ -6,9 +6,10 @@ class AliasListStorage(ListStorage):
     primaryKey = "address"
     validityCheckMarker = "#### managed-by-edulution-sync ####"
 
-    def __init__(self, domainList: DomainListStorage):
+    def __init__(self, domainList: DomainListStorage, force_marker_update: bool = False):
         super().__init__()
         self._domainList = domainList
+        self._force_marker_update = force_marker_update
 
     def _checkElementValidity(self, element):
         # Check if domain is managed
@@ -21,3 +22,18 @@ class AliasListStorage(ListStorage):
 
         # No marker = not managed by sync (manual alias)
         return False
+
+    def _checkElementValueDelta(self, key, currentElement, newValue):
+        # Update private_comment if it doesn't have the marker (for migration)
+        if key == "private_comment":
+            current_comment = currentElement.get("private_comment", "")
+            if current_comment is None:
+                current_comment = ""
+            # If migration mode is enabled or current comment doesn't have marker, force update
+            if self._force_marker_update or self.validityCheckMarker not in current_comment:
+                return True
+            # If it has marker, check if value changed
+            return current_comment != newValue
+
+        # For all other keys, use default behavior
+        return super()._checkElementValueDelta(key, currentElement, newValue)
