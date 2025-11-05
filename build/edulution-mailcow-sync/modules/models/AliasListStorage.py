@@ -16,7 +16,12 @@ class AliasListStorage(ListStorage):
         if element["address"].split("@")[-1] not in self._domainList._managed:
             return False
 
-        # Check if alias has the management marker
+        # In force marker update mode: treat all domain-matched aliases as managed
+        if self._force_marker_update:
+            # All aliases in managed domain = managed (for migration)
+            return True
+
+        # Normal mode: Check if alias has the management marker
         if "private_comment" in element and element["private_comment"] is not None:
             return self.validityCheckMarker in element["private_comment"]
 

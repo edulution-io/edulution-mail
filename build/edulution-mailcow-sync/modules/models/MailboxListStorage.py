@@ -17,7 +17,16 @@ class MailboxListStorage(ListStorage):
         if element["domain"] not in self._domainList._managed:
             return False
 
-        # Check tags
+        # In force marker update mode: treat all domain-matched mailboxes as managed
+        if self._force_marker_update:
+            # Still respect "not-managed" tag
+            if "tags" in element and element["tags"] is not None:
+                if self.validityCheckTag in element["tags"]:
+                    return False
+            # All others in managed domain = managed (for migration)
+            return True
+
+        # Normal mode: Check tags
         if "tags" in element and element["tags"] is not None:
             # Legacy: Backwards compatibility - respect "not-managed" tag
             if self.validityCheckTag in element["tags"]:
