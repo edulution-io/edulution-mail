@@ -13,4 +13,5 @@ COPY ./ldap-server.py /app/ldap-server.py
 
 COPY ./entrypoint.sh entrypoint.sh
 RUN chmod +x entrypoint.sh
+RUN chmod +x /app/delete_from_file.py
 ENTRYPOINT [ "./entrypoint.sh" ]

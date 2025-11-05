@@ -1,0 +1,21 @@
+# Example deletion list for delete_from_file.py
+#
+# Format: One email address per line
+# Lines starting with # are comments and will be ignored
+# Empty lines are also ignored
+#
+# This file can be used as a template for bulk deletion operations
+
+# Example users to delete
+# user1@example.com
+# user2@example.com
+# user3@example.com
+
+# Example aliases to delete
+# oldalias@example.com
+# tempalias@example.com
+
+# The script will automatically detect whether each address is a mailbox or alias
+# and delete accordingly
+
+# Addresses in IGNORE_MAILBOXES will be automatically skipped

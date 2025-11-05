@@ -10,6 +10,10 @@ from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, Co
 
 logging.basicConfig(format='%(levelname)s: %(asctime)s %(message)s', level=logging.INFO)
 
+# Management markers for identifying sync-managed objects
+MANAGED_MARKER_ALIAS = "#### managed-by-edulution-sync ####"
+MANAGED_TAG_MAILBOX = "edulution-sync-managed"
+
 class EdulutionMailcowSync:
 
     def __init__(self):
@@ -114,10 +118,6 @@ class EdulutionMailcowSync:
             mail = group["attributes"]["mail"][0]
             maildomain = mail.split("@")[-1]
 
-            description = mail
-            if "description" in group["attributes"]:
-                description = group["attributes"]["description"][0]
-            
             membermails = []
             for member in group["members"]:
                 if "id" not in member:
@@ -139,12 +139,12 @@ class EdulutionMailcowSync:
                 if self._config.SOFT_DELETE_ENABLED and mail in aliasList._all:
                     logging.warning(f"    -> Mailinglist {mail} has no members from Keycloak, but exists in Mailcow - processing with soft-delete")
                     # Process with empty member list to trigger soft-delete tracking
-                    self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description, track_member_changes = True)
+                    self._addAlias(mail, membermails, aliasList, sogo_visible = 0, track_member_changes = True)
                 else:
                     logging.debug(f"    -> Mailinglist {mail} has no members, skipping!")
                     continue
             else:
-                self._addAlias(mail, membermails, aliasList, sogo_visible = 0, alias_description = description, track_member_changes = True)
+                self._addAlias(mail, membermails, aliasList, sogo_visible = 0, track_member_changes = True)
 
             self._addAliasesFromProxyAddresses(group, mail, aliasList)
 
@@ -160,7 +160,7 @@ class EdulutionMailcowSync:
         logging.info("* 3. Syncing deltas to mailcow")
 
         # 1. Process deactivations and deletions
-        #self._processDeactivationsAndDeletions(domainList, mailboxList, aliasList, filterList)
+        self._processDeactivationsAndDeletions(domainList, mailboxList, aliasList, filterList)
 
         # 2. Domain(s) add and update
 
@@ -218,24 +218,37 @@ class EdulutionMailcowSync:
     def _processDeactivationsAndDeletions(self, domainList: DomainListStorage, mailboxList: MailboxListStorage, aliasList: AliasListStorage, filterList: FilterListStorage):
         grace_period = self._config.SOFT_DELETE_GRACE_PERIOD
         soft_delete_enabled = self._config.SOFT_DELETE_ENABLED
-        
-        # Process deletions for filters (always immediate)
+        delete_enabled = self._config.DELETE_ENABLED
+
+        # Collect deletion candidates for logging
+        deletion_candidates = {
+            "filters": [],
+            "aliases": [],
+            "mailboxes": [],
+            "domains": []
+        }
+
+        # Process deletions for filters (always immediate if DELETE_ENABLED)
         for filter in filterList.disableQueue():
             filter_id = filter.get('id')
             if filter_id:
-                self.mailcow.deleteFilter(filter_id)
-                logging.info(f"  * Deleted filter {filter_id}")
+                deletion_candidates["filters"].append(filter_id)
+                if delete_enabled:
+                    self.mailcow.deleteFilter(filter_id)
+                    logging.info(f"  * Deleted filter {filter_id}")
         
         if soft_delete_enabled:
             # Process deactivations for aliases with mark counting
             for alias in aliasList.disableQueue():
                 alias_id = alias.get('id') or alias.get('address')
                 if alias_id:
+                    deletion_candidates["aliases"].append(alias_id)
                     # Mark for deactivation (will only delete after threshold marks)
                     if self.deactivationTracker.markForDeactivation("aliases", alias_id, grace_period):
-                        # Threshold reached - actually delete
-                        self.mailcow.deleteAlias(alias_id)
-                        logging.info(f"  * Deleted alias {alias_id} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+                        # Threshold reached - actually delete (if DELETE_ENABLED)
+                        if delete_enabled:
+                            self.mailcow.deleteAlias(alias_id)
+                            logging.info(f"  * Deleted alias {alias_id} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
             
             # Process deactivations for mailboxes - with missing count check
             for mailbox in mailboxList.disableQueue():
@@ -245,46 +258,50 @@ class EdulutionMailcowSync:
                     username = mailbox['username']
                 elif 'local_part' in mailbox and 'domain' in mailbox:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
-                
+
                 if username:
                     # Skip ignored mailboxes
                     if username in self._config.IGNORE_MAILBOXES:
                         logging.debug(f"  * Skipping ignored mailbox from deletion: {username}")
                         continue
-                    
+
+                    deletion_candidates["mailboxes"].append(username)
                     # Mark for deactivation (will only deactivate after threshold marks)
                     if self.deactivationTracker.markForDeactivation("mailboxes", username, grace_period):
-                        # Third mark reached - actually deactivate
-                        # Extract local_part and domain for the update
-                        local_part, domain = username.split('@')
-                        self.mailcow.updateMailbox({
-                            "attr": {
-                                "active": 0,
-                                "local_part": local_part,
-                                "domain": domain
-                            },
-                            "items": [username]
-                        })
-                        logging.info(f"  * Deactivated mailbox {username} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+                        # Third mark reached - actually deactivate (if DELETE_ENABLED)
+                        if delete_enabled:
+                            # Extract local_part and domain for the update
+                            local_part, domain = username.split('@')
+                            self.mailcow.updateMailbox({
+                                "attr": {
+                                    "active": 0,
+                                    "local_part": local_part,
+                                    "domain": domain
+                                },
+                                "items": [username]
+                            })
+                            logging.info(f"  * Deactivated mailbox {username} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
             
             # Process deactivations for domains
             for domain in domainList.disableQueue():
                 domain_name = domain.get('domain_name')
                 if domain_name:
-                    # Mark for deactivation (will only deactivate after 3 marks)
+                    deletion_candidates["domains"].append(domain_name)
+                    # Mark for deactivation (will only deactivate after threshold marks)
                     if self.deactivationTracker.markForDeactivation("domains", domain_name, grace_period):
-                        # Third mark reached - actually deactivate
-                        self.mailcow.updateDomain({
-                            "attr": {
-                                "active": 0,
-                                "domain": domain_name
-                            },
-                            "items": [domain_name]
-                        })
-                        logging.info(f"  * Deactivated domain {domain_name} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
+                        # Threshold reached - actually deactivate (if DELETE_ENABLED)
+                        if delete_enabled:
+                            self.mailcow.updateDomain({
+                                "attr": {
+                                    "active": 0,
+                                    "domain": domain_name
+                                },
+                                "items": [domain_name]
+                            })
+                            logging.info(f"  * Deactivated domain {domain_name} after {self._config.SOFT_DELETE_MARK_COUNT} marks")
             
             # Check for items to permanently delete (if enabled)
-            if self._config.PERMANENT_DELETE_ENABLED:
+            if self._config.PERMANENT_DELETE_ENABLED and delete_enabled:
                 for mailbox_id in self.deactivationTracker.getItemsToDelete("mailboxes"):
                     # Skip ignored mailboxes from permanent deletion
                     if mailbox_id in self._config.IGNORE_MAILBOXES:
@@ -292,12 +309,12 @@ class EdulutionMailcowSync:
                     if self.mailcow.deleteMailbox(mailbox_id):
                         self.deactivationTracker.removeDeleted("mailboxes", mailbox_id)
                         logging.info(f"  * Permanently deleted mailbox {mailbox_id}")
-                
+
                 for domain_id in self.deactivationTracker.getItemsToDelete("domains"):
                     if self.mailcow.deleteDomain(domain_id):
                         self.deactivationTracker.removeDeleted("domains", domain_id)
                         logging.info(f"  * Permanently deleted domain {domain_id}")
-                
+
                 # Also check for aliases to permanently delete
                 for alias_id in self.deactivationTracker.getItemsToDelete("aliases"):
                     self.deactivationTracker.removeDeleted("aliases", alias_id)
@@ -316,13 +333,15 @@ class EdulutionMailcowSync:
                     self.deactivationTracker.reactivate("domains", domain_name)
                     logging.info(f"  * Reactivated domain {domain_name} (found in Keycloak again)")
         else:
-            # Soft delete disabled - immediate deletion
+            # Soft delete disabled - immediate deletion (if DELETE_ENABLED)
             for alias in aliasList.disableQueue():
                 alias_id = alias.get('id') or alias.get('address')
                 if alias_id:
-                    self.mailcow.deleteAlias(alias_id)
-                    logging.info(f"  * Deleted alias {alias_id}")
-            
+                    deletion_candidates["aliases"].append(alias_id)
+                    if delete_enabled:
+                        self.mailcow.deleteAlias(alias_id)
+                        logging.info(f"  * Deleted alias {alias_id}")
+
             for mailbox in mailboxList.disableQueue():
                 # Get username from mailbox data
                 username = None
@@ -330,21 +349,47 @@ class EdulutionMailcowSync:
                     username = mailbox['username']
                 elif 'local_part' in mailbox and 'domain' in mailbox:
                     username = mailbox['local_part'] + '@' + mailbox['domain']
-                
+
                 if username:
                     # Skip ignored mailboxes
                     if username in self._config.IGNORE_MAILBOXES:
                         logging.debug(f"  * Skipping ignored mailbox from deletion: {username}")
                         continue
-                    self.mailcow.deleteMailbox(username)
-                    logging.info(f"  * Deleted mailbox {username}")
-            
+                    deletion_candidates["mailboxes"].append(username)
+                    if delete_enabled:
+                        self.mailcow.deleteMailbox(username)
+                        logging.info(f"  * Deleted mailbox {username}")
+
             for domain in domainList.disableQueue():
                 domain_name = domain.get('domain_name')
                 if domain_name:
-                    self.mailcow.deleteDomain(domain_name)
-                    logging.info(f"  * Deleted domain {domain_name}")
-    
+                    deletion_candidates["domains"].append(domain_name)
+                    if delete_enabled:
+                        self.mailcow.deleteDomain(domain_name)
+                        logging.info(f"  * Deleted domain {domain_name}")
+
+        # Log deletion candidates summary
+        if not delete_enabled:
+            total_candidates = sum(len(v) for v in deletion_candidates.values())
+            if total_candidates > 0:
+                logging.warning("")
+                logging.warning("=================================================================")
+                logging.warning("DELETION IS DISABLED (DELETE_ENABLED=0)")
+                logging.warning(f"The following {total_candidates} items would be deleted if enabled:")
+                logging.warning("=================================================================")
+                if deletion_candidates["filters"]:
+                    logging.warning(f"  Filters ({len(deletion_candidates['filters'])}): {', '.join(deletion_candidates['filters'])}")
+                if deletion_candidates["aliases"]:
+                    logging.warning(f"  Aliases ({len(deletion_candidates['aliases'])}): {', '.join(deletion_candidates['aliases'])}")
+                if deletion_candidates["mailboxes"]:
+                    logging.warning(f"  Mailboxes ({len(deletion_candidates['mailboxes'])}): {', '.join(deletion_candidates['mailboxes'])}")
+                if deletion_candidates["domains"]:
+                    logging.warning(f"  Domains ({len(deletion_candidates['domains'])}): {', '.join(deletion_candidates['domains'])}")
+                logging.warning("=================================================================")
+                logging.warning("To enable deletion, set DELETE_ENABLED=1 in your configuration")
+                logging.warning("=================================================================")
+                logging.warning("")
+
     def _addMailbox(self, user: dict, mailboxList: MailboxListStorage) -> bool:
         mail = user["email"]
         domain = mail.split("@")[-1]
@@ -362,7 +407,8 @@ class EdulutionMailcowSync:
             "quota": quota,
             "password": password,
             "password2": password,
-            "name": user["firstName"] + " " + user["lastName"]
+            "name": user["firstName"] + " " + user["lastName"],
+            "tags": [MANAGED_TAG_MAILBOX]
         }, mail)
     
     def _addAliasesFromProxyAddresses(self, user: dict, mail: str, mailcowAliases: str | list) -> bool:
@@ -380,7 +426,7 @@ class EdulutionMailcowSync:
 
         return True
 
-    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1, alias_description: str = "", track_member_changes: bool = False) -> bool:
+    def _addAlias(self, alias: str, goto: str | list, aliasList: AliasListStorage, sogo_visible: int = 1, track_member_changes: bool = False) -> bool:
         # Convert goto to list if needed
         new_members = goto if isinstance(goto, list) else [goto]
 
@@ -411,7 +457,7 @@ class EdulutionMailcowSync:
             "goto": goto_targets,
             "active": 1,
             "sogo_visible": sogo_visible,
-            "private_comment": alias_description
+            "private_comment": MANAGED_MARKER_ALIAS
         }, alias)
 
     # def _addListFilter(self, listAddress: str, memberAddresses: list, filterList: FilterListStorage):
