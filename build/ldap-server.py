@@ -218,7 +218,8 @@ def build_ldap_tree_from_sql():
         group_entries = {}
         for group in groups:
             group_id = group['c_uid']  # e.g., "p_cgs-edu3@linuxmuster.lan"
-            display_name = group.get('c_cn') or group_id  # Display name for logging
+            # Get display name from c_cn (e.g., description from LDAP)
+            display_name = group.get('c_cn') or group_id
             mail = group['mail']
             members_str = group.get('groupMembers') or ''
 
@@ -259,6 +260,7 @@ def build_ldap_tree_from_sql():
                 attributes={
                     b"objectClass": [b"groupOfUniqueNames", b"top", b"extensibleObject"],
                     b"cn": [cn_value.encode('utf-8')],  # MUST match cn in DN
+                    b"displayName": [display_name.encode('utf-8')],  # Human-readable name for SOGo
                     b"mail": [mail.encode('utf-8')],
                     b"uniqueMember": unique_members,
                     b"structuralObjectClass": [b"groupOfUniqueNames"],
