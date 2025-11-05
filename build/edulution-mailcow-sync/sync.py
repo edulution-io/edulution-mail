@@ -248,10 +248,12 @@ class EdulutionMailcowSync:
             # Process deactivations for aliases with mark counting
             for alias in aliasList.disableQueue():
                 alias_id = alias.get('id') or alias.get('address')
+                # Use address for logging (more user-friendly than numeric ID)
+                alias_address = alias.get('address') or str(alias_id)
                 if debug_mode:
                     logging.debug(f"  * [DEBUG] Processing alias for deletion: id={alias.get('id')} (type: {type(alias.get('id'))}), address={alias.get('address')} (type: {type(alias.get('address'))}), final alias_id={alias_id} (type: {type(alias_id)})")
                 if alias_id:
-                    deletion_candidates["aliases"].append(alias_id)
+                    deletion_candidates["aliases"].append(alias_address)
                     # Mark for deactivation (will only delete after threshold marks)
                     if self.deactivationTracker.markForDeactivation("aliases", alias_id, grace_period):
                         # Threshold reached - actually delete (if DELETE_ENABLED)
@@ -345,11 +347,13 @@ class EdulutionMailcowSync:
             # Soft delete disabled - immediate deletion (if DELETE_ENABLED)
             for alias in aliasList.disableQueue():
                 alias_id = alias.get('id') or alias.get('address')
+                # Use address for logging (more user-friendly than numeric ID)
+                alias_address = alias.get('address') or str(alias_id)
                 if alias_id:
-                    deletion_candidates["aliases"].append(alias_id)
+                    deletion_candidates["aliases"].append(alias_address)
                     if delete_enabled:
                         self.mailcow.deleteAlias(alias_id)
-                        logging.info(f"  * Deleted alias {alias_id}")
+                        logging.info(f"  * Deleted alias {alias_address}")
 
             for mailbox in mailboxList.disableQueue():
                 # Get username from mailbox data
