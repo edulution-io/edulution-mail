@@ -16,7 +16,7 @@ class AliasListStorage(ListStorage):
             return False
 
         # Check if alias has the management marker
-        if "private_comment" in element:
+        if "private_comment" in element and element["private_comment"] is not None:
             return self.validityCheckMarker in element["private_comment"]
 
         # No marker = not managed by sync (manual alias)

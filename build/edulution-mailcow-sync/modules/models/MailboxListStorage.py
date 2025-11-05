@@ -17,7 +17,7 @@ class MailboxListStorage(ListStorage):
             return False
 
         # Check tags
-        if "tags" in element:
+        if "tags" in element and element["tags"] is not None:
             # Legacy: Backwards compatibility - respect "not-managed" tag
             if self.validityCheckTag in element["tags"]:
                 return False
