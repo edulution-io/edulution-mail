@@ -8,7 +8,13 @@ import os
 
 from modules import Keycloak, Mailcow, DomainListStorage, MailboxListStorage, ConfigurationStorage, AliasListStorage, FilterListStorage, DeactivationTracker
 
-logging.basicConfig(format='%(levelname)s: %(asctime)s %(message)s', level=logging.INFO)
+# Configure logging level from environment variable
+# To enable debug mode, set: LOG_LEVEL=DEBUG
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    format='%(levelname)s: %(asctime)s %(message)s',
+    level=getattr(logging, log_level, logging.INFO)
+)
 
 # Management markers for identifying sync-managed objects
 MANAGED_MARKER_ALIAS = "#### managed-by-edulution-sync ####"
@@ -219,6 +225,7 @@ class EdulutionMailcowSync:
         grace_period = self._config.SOFT_DELETE_GRACE_PERIOD
         soft_delete_enabled = self._config.SOFT_DELETE_ENABLED
         delete_enabled = self._config.DELETE_ENABLED
+        debug_mode = logging.getLogger().level == logging.DEBUG
 
         # Collect deletion candidates for logging
         deletion_candidates = {
@@ -241,6 +248,8 @@ class EdulutionMailcowSync:
             # Process deactivations for aliases with mark counting
             for alias in aliasList.disableQueue():
                 alias_id = alias.get('id') or alias.get('address')
+                if debug_mode:
+                    logging.debug(f"  * [DEBUG] Processing alias for deletion: id={alias.get('id')} (type: {type(alias.get('id'))}), address={alias.get('address')} (type: {type(alias.get('address'))}), final alias_id={alias_id} (type: {type(alias_id)})")
                 if alias_id:
                     deletion_candidates["aliases"].append(alias_id)
                     # Mark for deactivation (will only delete after threshold marks)
@@ -377,14 +386,29 @@ class EdulutionMailcowSync:
                 logging.warning("DELETION IS DISABLED (DELETE_ENABLED=0)")
                 logging.warning(f"The following {total_candidates} items would be deleted if enabled:")
                 logging.warning("=================================================================")
+
+                # Debug logging for type checking
+                if debug_mode:
+                    for category, items in deletion_candidates.items():
+                        if items:
+                            logging.debug(f"  * [DEBUG] {category} items and types:")
+                            for item in items:
+                                logging.debug(f"    - {item} (type: {type(item).__name__})")
+
+                # Convert all items to strings for display
                 if deletion_candidates["filters"]:
-                    logging.warning(f"  Filters ({len(deletion_candidates['filters'])}): {', '.join(deletion_candidates['filters'])}")
+                    filters_str = ', '.join(str(x) for x in deletion_candidates['filters'])
+                    logging.warning(f"  Filters ({len(deletion_candidates['filters'])}): {filters_str}")
                 if deletion_candidates["aliases"]:
-                    logging.warning(f"  Aliases ({len(deletion_candidates['aliases'])}): {', '.join(deletion_candidates['aliases'])}")
+                    aliases_str = ', '.join(str(x) for x in deletion_candidates['aliases'])
+                    logging.warning(f"  Aliases ({len(deletion_candidates['aliases'])}): {aliases_str}")
                 if deletion_candidates["mailboxes"]:
-                    logging.warning(f"  Mailboxes ({len(deletion_candidates['mailboxes'])}): {', '.join(deletion_candidates['mailboxes'])}")
+                    mailboxes_str = ', '.join(str(x) for x in deletion_candidates['mailboxes'])
+                    logging.warning(f"  Mailboxes ({len(deletion_candidates['mailboxes'])}): {mailboxes_str}")
                 if deletion_candidates["domains"]:
-                    logging.warning(f"  Domains ({len(deletion_candidates['domains'])}): {', '.join(deletion_candidates['domains'])}")
+                    domains_str = ', '.join(str(x) for x in deletion_candidates['domains'])
+                    logging.warning(f"  Domains ({len(deletion_candidates['domains'])}): {domains_str}")
+
                 logging.warning("=================================================================")
                 logging.warning("To enable deletion, set DELETE_ENABLED=1 in your configuration")
                 logging.warning("=================================================================")
