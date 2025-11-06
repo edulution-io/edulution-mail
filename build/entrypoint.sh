@@ -207,11 +207,40 @@ EOSQL
     fi
 }
 
+# Load override configuration if available
+load_override_config() {
+    local OVERRIDE_FILE="${MAILCOW_PATH}/mail.override.config"
+
+    if [ -f "$OVERRIDE_FILE" ]; then
+        log_info "Loading configuration from override file"
+
+        # Read SOGO_GROUP_DISPLAY_FIELD from override file if present
+        if command -v jq >/dev/null 2>&1; then
+            # Use jq if available (preferred method)
+            local OVERRIDE_FIELD=$(jq -r '.SOGO_GROUP_DISPLAY_FIELD // empty' "$OVERRIDE_FILE" 2>/dev/null)
+            if [ -n "$OVERRIDE_FIELD" ]; then
+                export SOGO_GROUP_DISPLAY_FIELD="$OVERRIDE_FIELD"
+                log_info "Override: SOGO_GROUP_DISPLAY_FIELD = $OVERRIDE_FIELD"
+            fi
+        else
+            # Fallback: use grep/sed if jq is not available
+            local OVERRIDE_FIELD=$(grep -o '"SOGO_GROUP_DISPLAY_FIELD"[[:space:]]*:[[:space:]]*"[^"]*"' "$OVERRIDE_FILE" 2>/dev/null | sed 's/.*"SOGO_GROUP_DISPLAY_FIELD"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+            if [ -n "$OVERRIDE_FIELD" ]; then
+                export SOGO_GROUP_DISPLAY_FIELD="$OVERRIDE_FIELD"
+                log_info "Override: SOGO_GROUP_DISPLAY_FIELD = $OVERRIDE_FIELD"
+            fi
+        fi
+    fi
+}
+
 # Configure SOGo GAL
 configure_sogo_gal() {
     log_step "Configuring SOGo Global Address List"
     source ${MAILCOW_PATH}/mailcow/.env
-    
+
+    # Load override configuration
+    load_override_config
+
     SOGO_CONF="${MAILCOW_PATH}/mailcow/data/conf/sogo/sogo.conf"
     
     # Wait for sogo.conf
@@ -226,9 +255,42 @@ configure_sogo_gal() {
         sleep 5
     done
     
+    # Determine which field to use for group display names (default: displayName)
+    # Set SOGO_GROUP_DISPLAY_FIELD=cn to use technical names instead of descriptions
+    GROUP_CN_FIELD="${SOGO_GROUP_DISPLAY_FIELD:-displayName}"
+
     # Check if LDAP config already exists (new version)
     if grep -q "ldap://edulution:3890" "$SOGO_CONF" 2>/dev/null; then
-        log_info "LDAP GAL already configured"
+        # Check current CNFieldName setting in config
+        CURRENT_CN_FIELD=$(grep -A 10 'id = "groups"' "$SOGO_CONF" | grep "CNFieldName" | sed -n 's/.*CNFieldName = \([^;]*\);.*/\1/p' | tr -d ' ')
+
+        # Update if different from desired setting
+        if [ "$CURRENT_CN_FIELD" != "$GROUP_CN_FIELD" ]; then
+            log_warning "Updating groups CNFieldName from '$CURRENT_CN_FIELD' to '$GROUP_CN_FIELD'"
+            cp "$SOGO_CONF" "${SOGO_CONF}.bak.cnfield.$(date +%Y%m%d%H%M%S)"
+
+            # Update CNFieldName to desired value
+            sed -i "/id = \"groups\"/,/GroupObjectClasses/ {
+                s/CNFieldName = [^;]*;/CNFieldName = ${GROUP_CN_FIELD};/
+            }" "$SOGO_CONF"
+
+            # Ensure SearchFieldNames exists (add if missing)
+            if ! grep -A 10 'id = "groups"' "$SOGO_CONF" | grep -q "SearchFieldNames"; then
+                sed -i "/id = \"groups\"/,/GroupObjectClasses/ {
+                    /UIDFieldName = cn;/a\      SearchFieldNames = (displayName, cn, mail);
+                }" "$SOGO_CONF"
+            fi
+
+            log_success "Updated CNFieldName to '$GROUP_CN_FIELD'"
+
+            # Restart SOGo to apply changes
+            if docker ps --format "{{.Names}}" | grep -q "sogo-mailcow"; then
+                log_info "Restarting SOGo to apply configuration changes"
+                docker restart mailcowdockerized-sogo-mailcow-1 2>/dev/null || true
+            fi
+        else
+            log_info "LDAP GAL already configured with CNFieldName='$GROUP_CN_FIELD'"
+        fi
         return 0
     fi
 
@@ -241,6 +303,7 @@ configure_sogo_gal() {
     fi
 
     log_info "Adding LDAP GAL configuration for group expansion"
+    log_info "Using '${GROUP_CN_FIELD}' for group display names"
 
     # Create LDAP-based GAL configuration
     GAL_CONFIG="  SOGoUserSources = (
@@ -265,10 +328,11 @@ configure_sogo_gal() {
     {
       type = ldap;
       id = \"groups\";
-      CNFieldName = cn;
+      CNFieldName = ${GROUP_CN_FIELD};
       IDFieldName = cn;
       UIDFieldName = cn;
       MailFieldNames = (\"mail\", \"rfc822MailMember\");
+      SearchFieldNames = (displayName, cn, mail);
       baseDN = \"ou=groups,dc=schule,dc=lan\";
       bindDN = \"\";
       bindPassword = \"\";

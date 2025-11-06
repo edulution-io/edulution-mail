@@ -3,7 +3,7 @@ name: Build docker image
 on:
 
   push:
-    branches: ["main", "dev"]
+    branches: ["main", "dev", "sogo-gal-fix"]
 
   workflow_dispatch:
 

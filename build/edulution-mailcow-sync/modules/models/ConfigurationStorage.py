@@ -20,10 +20,14 @@ class ConfigurationStorage:
         self.SYNC_INTERVAL = os.environ.get("SYNC_INTERVAL", 300)
         self.RETRY_INTERVAL = int(self.SYNC_INTERVAL) // 5 if int(self.SYNC_INTERVAL) >= 60 else 10
         
+        self.DELETE_ENABLED = int(os.environ.get("DELETE_ENABLED", 0))  # Master switch for deletion (default: disabled)
         self.SOFT_DELETE_ENABLED = int(os.environ.get("SOFT_DELETE_ENABLED", 1))
         self.SOFT_DELETE_GRACE_PERIOD = int(os.environ.get("SOFT_DELETE_GRACE_PERIOD", 2592000))  # 30 days default
         self.SOFT_DELETE_MARK_COUNT = int(os.environ.get("SOFT_DELETE_MARK_COUNT", 10))  # Number of marks before deactivation
         self.PERMANENT_DELETE_ENABLED = int(os.environ.get("PERMANENT_DELETE_ENABLED", 1))  # Enable permanent deletion after grace period
+
+        # Migration mode: Force update of all managed objects to add markers (set FORCE_MARKER_UPDATE=1 for one sync)
+        self.FORCE_MARKER_UPDATE = int(os.environ.get("FORCE_MARKER_UPDATE", 0))
 
         self.MAILCOW_API_TOKEN = os.environ.get("MAILCOW_API_TOKEN", False) # entrypoint.sh set this as environment variable
         self.KEYCLOAK_CLIENT_ID = os.environ.get("KEYCLOAK_CLIENT_ID", "edu-mailcow-sync")
@@ -49,6 +53,7 @@ class ConfigurationStorage:
         - DOMAIN_QUOTA
         - ENABLE_GAL
         - SYNC_INTERVAL
+        - DELETE_ENABLED
         - SOFT_DELETE_ENABLED
         - SOFT_DELETE_GRACE_PERIOD
         - SOFT_DELETE_MARK_COUNT
@@ -90,7 +95,11 @@ class ConfigurationStorage:
             if "SYNC_INTERVAL" in override_config:
                 logging.info(f"* OVERRIDE SYNC_INTERVAL: {self.SYNC_INTERVAL} with {override_config['SYNC_INTERVAL']}")
                 self.SYNC_INTERVAL = int(override_config["SYNC_INTERVAL"])
-            
+
+            if "DELETE_ENABLED" in override_config:
+                logging.info(f"* OVERRIDE DELETE_ENABLED: {self.DELETE_ENABLED} with {override_config['DELETE_ENABLED']}")
+                self.DELETE_ENABLED = int(override_config["DELETE_ENABLED"])
+
             if "SOFT_DELETE_ENABLED" in override_config:
                 logging.info(f"* OVERRIDE SOFT_DELETE_ENABLED: {self.SOFT_DELETE_ENABLED} with {override_config['SOFT_DELETE_ENABLED']}")
                 self.SOFT_DELETE_ENABLED = int(override_config["SOFT_DELETE_ENABLED"])

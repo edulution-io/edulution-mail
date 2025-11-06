@@ -45,6 +45,7 @@ A direct login in SOGO is currently not possible. The login is carried out via t
 | MAILCOW_TZ                     | No                | Europe/Berlin                                      | Mailcow timezone |
 | MAILCOW_API_TOKEN              | No                | <will be generated>                                | Define an api token to use. Schould be somthing like aaaaa-bbbbb-ccccc-ddddd-eeeee |
 | MAILCOW_BRANCH                 | No                | master                                             | Mailcow branche (master / nightly) |
+| SOGO_GROUP_DISPLAY_FIELD       | No                | displayName                                        | Field to use for group display names in SOGo: `displayName` (shows description like "Eltern von...") or `cn` (shows technical name like "netzint1-eltern") |
 | KEYCLOAK_CLIENT_ID             | No               | edu-mailcow-sync                                    | Client-ID for login in keycloak |
 ||
 | KEYCLOAK_SECRET_KEY            | Yes               |                                                    | Secret-Key for login in keycloak |
@@ -71,15 +72,39 @@ docker run -d \
 
 You can override the environment variables in the **mail.override.config** file in the MAILCOW_PATH directory. The file must be in JSON format and can look like this:
 
-```
+```json
 {
   "DEFAULT_USER_QUOTA": 1000,
   "GROUPS_TO_SYNC": "role-schooladministrator,role-teacher,role-student",
   "DOMAIN_QUOTA": 10240,
   "ENABLE_GAL": 1,
-  "SYNC_INTERVAL": 300
+  "SYNC_INTERVAL": 300,
+  "SOGO_GROUP_DISPLAY_FIELD": "displayName"
 }
 ```
+
+### SOGo Group Display Configuration
+
+By default, groups in SOGo are displayed with their descriptive names (from the `description` field in LDAP/Sophomorix). For example, a parent group would show as "Eltern von T1-Student Netzint (netzint1)" instead of the technical name "netzint1-eltern".
+
+To change this behavior and use technical names instead:
+
+```json
+{
+  "SOGO_GROUP_DISPLAY_FIELD": "cn"
+}
+```
+
+Or via environment variable:
+
+```bash
+docker run -d \
+  --name edulution-mail \
+  -e SOGO_GROUP_DISPLAY_FIELD=cn \
+  ...
+```
+
+**Note:** After changing this setting, the container must be restarted. The SOGo configuration will be automatically updated and SOGo will be restarted to apply the changes.
 
 ## Temporarily disable sync
 
