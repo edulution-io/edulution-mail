@@ -29,11 +29,17 @@ class AliasListStorage(ListStorage):
         return False
 
     def _checkElementValueDelta(self, key, currentElement, newValue):
+        import logging
         # Update private_comment if it doesn't have the marker (for migration)
         if key == "private_comment":
             current_comment = currentElement.get("private_comment", "")
             if current_comment is None:
                 current_comment = ""
+
+            # Debug logging
+            if self._force_marker_update and logging.getLogger().level == logging.DEBUG:
+                logging.debug(f"  * [ALIAS DEBUG] Checking {currentElement.get('address')}: current_comment='{current_comment[:50] if current_comment else 'EMPTY'}...', newValue='{newValue[:50]}...', has_marker={self.validityCheckMarker in current_comment}")
+
             # If migration mode is enabled or current comment doesn't have marker, force update
             if self._force_marker_update or self.validityCheckMarker not in current_comment:
                 return True
