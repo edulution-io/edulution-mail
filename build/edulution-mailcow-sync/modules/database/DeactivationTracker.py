@@ -23,7 +23,16 @@ class DeactivationTracker:
         if os.path.exists(self.storage_file):
             try:
                 with open(self.storage_file, 'r') as f:
-                    self.data = json.load(f)
+                    loaded_data = json.load(f)
+
+                # Merge loaded data with default structure to ensure all keys exist
+                self.data.update(loaded_data)
+
+                # Ensure all required keys exist (for backward compatibility)
+                if "alias_members" not in self.data:
+                    self.data["alias_members"] = {}
+                    logging.info(f"  * Added missing 'alias_members' key to tracker")
+
                 logging.info(f"  * Loaded deactivation tracker from {self.storage_file}")
             except Exception as e:
                 logging.error(f"  * Failed to load deactivation tracker: {e}")
@@ -158,25 +167,33 @@ class DeactivationTracker:
         # Reactivate members that are present again
         for member in members_still_present:
             member_key = f"{alias_address}:{member}"
-            if member_key in self.data["alias_members"]:
-                self.reactivate("alias_members", member_key)
+            try:
+                if "alias_members" in self.data and member_key in self.data["alias_members"]:
+                    self.reactivate("alias_members", member_key)
+            except Exception as e:
+                logging.error(f"    -> Error reactivating member {member}: {e}")
 
         # Mark missing members for deactivation
         members_to_keep_in_grace = []
         for member in members_missing:
             member_key = f"{alias_address}:{member}"
 
-            # Mark for deactivation (grace period is 0 for alias members, we only use mark count)
-            reached_threshold = self.markForDeactivation("alias_members", member_key, 0)
+            try:
+                # Mark for deactivation (grace period is 0 for alias members, we only use mark count)
+                reached_threshold = self.markForDeactivation("alias_members", member_key, 0)
 
-            # If threshold not yet reached, keep the member in the alias
-            if not reached_threshold:
-                members_to_keep_in_grace.append(member)
-                logging.info(f"    -> Keeping member {member} in alias {alias_address} during grace period ({self.getMarkCount('alias_members', member_key)}/{self.mark_count_threshold})")
-            else:
-                logging.info(f"    -> Removing member {member} from alias {alias_address} after {self.mark_count_threshold} marks")
-                # Clean up from tracker after removal
-                self.removeDeleted("alias_members", member_key)
+                # If threshold not yet reached, keep the member in the alias
+                if not reached_threshold:
+                    members_to_keep_in_grace.append(member)
+                    logging.info(f"    -> Keeping member {member} in alias {alias_address} during grace period ({self.getMarkCount('alias_members', member_key)}/{self.mark_count_threshold})")
+                else:
+                    logging.info(f"    -> Removing member {member} from alias {alias_address} after {self.mark_count_threshold} marks")
+                    # Clean up from tracker after removal
+                    self.removeDeleted("alias_members", member_key)
+            except Exception as e:
+                logging.error(f"    -> Error processing member {member} for deactivation: {e}")
+                # On error, remove member immediately to avoid inconsistency
+                logging.warning(f"    -> Removing member {member} immediately due to error")
 
         # New members to add (from Keycloak)
         for member in members_to_add:
